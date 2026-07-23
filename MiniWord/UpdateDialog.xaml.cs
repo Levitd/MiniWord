@@ -41,12 +41,15 @@ namespace MiniWord
                 var progress = new Progress<double>(p => DownloadProgress.Value = p);
                 var installerPath = await UpdateService.DownloadInstallerAsync(_info, progress);
 
-                // Launch the installer silently and quit so it can replace files.
-                // AppMutex in the installer waits for this instance to exit.
-                Process.Start(new ProcessStartInfo(installerPath)
+                // The installer cannot overwrite MiniWord.exe while this
+                // process still holds it, so start it through a short delay
+                // and quit immediately — by the time it runs, we are gone.
+                Process.Start(new ProcessStartInfo("cmd.exe")
                 {
-                    UseShellExecute = true,
-                    Arguments = "/SILENT"
+                    Arguments = $"/c timeout /t 3 /nobreak >nul & \"{installerPath}\" /SILENT",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
                 });
 
                 Application.Current.Shutdown();
