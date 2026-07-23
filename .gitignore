@@ -10,5 +10,8 @@
 *.user
 *.suo
 
+# Installer build output
+installer/Output/
+
 # Claude Code local settings
 .claude/

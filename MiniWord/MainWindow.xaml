@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:MiniWord"
         mc:Ignorable="d"
         Title="MiniWord" Height="700" Width="1000"
+        Icon="MiniWord.ico"
         Background="White">
     <DockPanel>
         <Menu DockPanel.Dock="Top" Background="#F3F2F1" Padding="5,2">

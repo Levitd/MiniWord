@@ -20,6 +20,16 @@
 - ↩️ Undo / Redo
 - 🌍 Интерфейс на русском и английском (переключение в настройках)
 
+## Скачать / Download
+
+**[⬇ Скачать установщик (Releases)](https://github.com/Levitd/MiniWord/releases/latest)** — `MiniWordSetup-x.x.x.exe` (~3 МБ)
+
+Установщик на русском и английском: выбор папки установки, ярлыки на рабочем столе и в меню Пуск (из меню Пуск можно закрепить на панели задач: ПКМ → «Закрепить на панели задач»).
+
+Требуется [.NET 6 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/6.0/runtime) (или новее) — если он не установлен, установщик предложит открыть страницу загрузки.
+
+*Requires .NET 6 Desktop Runtime or newer — the installer checks for it and offers the download page if missing.*
+
 ## Сборка / Build
 
 Требуется [.NET 6 SDK](https://dotnet.microsoft.com/download/dotnet/6.0) (или новее) на Windows.
