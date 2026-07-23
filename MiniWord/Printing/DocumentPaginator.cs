@@ -25,7 +25,11 @@ namespace MiniWord
             _document.PagePadding = new Thickness(PageMargin);
             _document.ColumnWidth = double.PositiveInfinity;
 
-            Inner.PageSize = pageSize;
+            var inner = Inner;
+            inner.PageSize = pageSize;
+            // Force synchronous pagination so PageCount is final before
+            // the XPS writer starts asking for pages
+            inner.ComputePageCount();
         }
 
         private System.Windows.Documents.DocumentPaginator Inner =>
@@ -33,13 +37,14 @@ namespace MiniWord
 
         public override DocumentPage GetPage(int pageNumber)
         {
+            // Missing is the sentinel the XPS writer relies on to stop
+            // enumerating pages — a blank page here means an infinite loop
             if (pageNumber >= Inner.PageCount)
-            {
-                var blank = new DrawingVisual();
-                return new DocumentPage(blank, _pageSize, new Rect(_pageSize), new Rect(_pageSize));
-            }
+                return DocumentPage.Missing;
 
             var page = Inner.GetPage(pageNumber);
+            if (page == DocumentPage.Missing)
+                return page;
             if (_settings == null || !_settings.HasAnyContent)
                 return page;
 
