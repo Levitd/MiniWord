@@ -1,0 +1,7 @@
+<Window x:Class="MiniWord.PreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Print Preview" Height="800" Width="920"
+        WindowStartupLocation="CenterOwner">
+    <DocumentViewer x:Name="Viewer" />
+</Window>

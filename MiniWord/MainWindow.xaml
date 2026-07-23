@@ -1,0 +1,221 @@
+<Window x:Class="MiniWord.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MiniWord"
+        mc:Ignorable="d"
+        Title="MiniWord" Height="700" Width="1000"
+        Background="White">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top" Background="#F3F2F1" Padding="5,2">
+            <MenuItem x:Name="MenuFile" Header="_File">
+                <MenuItem x:Name="MenuNew" Header="_New" Click="MenuFileNew_Click" InputGestureText="Ctrl+N" />
+                <MenuItem x:Name="MenuOpen" Header="_Open..." Click="MenuFileOpen_Click" InputGestureText="Ctrl+O" />
+                <MenuItem x:Name="MenuSave" Header="_Save" Click="MenuFileSave_Click" InputGestureText="Ctrl+S" />
+                <MenuItem x:Name="MenuSaveAs" Header="Save _As..." Click="MenuFileSaveAs_Click" />
+                <Separator />
+                <MenuItem x:Name="MenuPreview" Header="Print Pre_view..." Click="MenuFilePreview_Click" />
+                <MenuItem x:Name="MenuPrint" Header="P_rint..." Click="MenuFilePrint_Click" InputGestureText="Ctrl+P" />
+                <Separator />
+                <MenuItem x:Name="MenuExit" Header="E_xit" Click="MenuFileExit_Click" />
+            </MenuItem>
+            <MenuItem x:Name="MenuEdit" Header="_Edit">
+                <MenuItem x:Name="MenuUndo" Header="_Undo" Click="MenuEditUndo_Click" InputGestureText="Ctrl+Z" />
+                <MenuItem x:Name="MenuRedo" Header="_Redo" Click="MenuEditRedo_Click" InputGestureText="Ctrl+Y" />
+            </MenuItem>
+            <MenuItem x:Name="MenuInsert" Header="_Insert">
+                <MenuItem x:Name="MenuInsertImage" Header="_Image..." Click="MenuInsertImage_Click">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8B9;" FontSize="14" VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="MenuHeaderFooter" Header="_Header &amp;&amp; Footer..." Click="MenuHeaderFooter_Click" />
+            </MenuItem>
+            <MenuItem x:Name="MenuTools" Header="_Tools">
+                <MenuItem x:Name="MenuSettings" Header="_Settings..." Click="MenuSettings_Click">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="14" VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
+
+        <ToolBarTray DockPanel.Dock="Top" Background="#F3F2F1">
+            <ToolBar Background="#F3F2F1" Padding="5,3" Band="0" BandIndex="0">
+                <ToolBar.Resources>
+                    <Style TargetType="Button" x:Key="IconButton">
+                        <Setter Property="Width" Value="30" />
+                        <Setter Property="Height" Value="28" />
+                        <Setter Property="Padding" Value="2" />
+                        <Setter Property="Margin" Value="1" />
+                    </Style>
+                    <Style TargetType="TextBlock" x:Key="Mdl2">
+                        <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+                        <Setter Property="FontSize" Value="15" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                        <Setter Property="HorizontalAlignment" Value="Center" />
+                    </Style>
+                </ToolBar.Resources>
+
+                <!-- Quick access -->
+                <Button x:Name="OpenButton" Style="{StaticResource IconButton}" Click="MenuFileOpen_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8E5;" />
+                </Button>
+                <Button x:Name="SaveButton" Style="{StaticResource IconButton}" Click="MenuFileSave_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE74E;" />
+                </Button>
+                <Button x:Name="PrintButton" Style="{StaticResource IconButton}" Click="MenuFilePrint_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE749;" />
+                </Button>
+
+                <Separator />
+
+                <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Click="MenuEditUndo_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE7A7;" />
+                </Button>
+                <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Click="MenuEditRedo_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE7A6;" />
+                </Button>
+
+                <Separator />
+
+                <!-- Font -->
+                <ComboBox x:Name="FontFamilyCombo" Width="150" Height="26" Margin="2"
+                          VerticalContentAlignment="Center"
+                          SelectionChanged="FontFamilyCombo_SelectionChanged" />
+                <ComboBox x:Name="FontSizeCombo" Width="55" Height="26" Margin="2"
+                          VerticalContentAlignment="Center"
+                          SelectionChanged="FontSizeCombo_SelectionChanged" />
+
+                <Separator />
+
+                <!-- Character formatting: Word-style letter buttons -->
+                <ToggleButton x:Name="BoldButton" Width="30" Height="28" Margin="1" Click="BoldButton_Click">
+                    <TextBlock FontWeight="Bold" FontSize="14" Text="B" />
+                </ToggleButton>
+                <ToggleButton x:Name="ItalicButton" Width="30" Height="28" Margin="1" Click="ItalicButton_Click">
+                    <TextBlock FontStyle="Italic" FontFamily="Georgia" FontSize="14" Text="I" />
+                </ToggleButton>
+                <ToggleButton x:Name="UnderlineButton" Width="30" Height="28" Margin="1" Click="UnderlineButton_Click">
+                    <TextBlock TextDecorations="Underline" FontSize="14" Text="U" />
+                </ToggleButton>
+
+                <!-- Font color: Word-style split button (letter + color bar, dropdown palette) -->
+                <Button x:Name="FontColorButton" Width="30" Height="28" Margin="3,1,0,1" Padding="0" Click="FontColorButton_Click">
+                    <StackPanel>
+                        <TextBlock Text="A" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" />
+                        <Rectangle x:Name="FontColorBar" Height="4" Width="16" Fill="#C00000" Margin="0,1,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="FontColorDropButton" Width="14" Height="28" Margin="0,1,1,1" Padding="0" Click="FontColorDrop_Click">
+                    <Path Data="M 0 0 L 6 0 L 3 4 Z" Fill="#444" />
+                </Button>
+                <Popup x:Name="FontColorPopup" StaysOpen="False" Placement="Bottom"
+                       PlacementTarget="{Binding ElementName=FontColorButton}">
+                    <Border Background="White" BorderBrush="#999" BorderThickness="1" Padding="6">
+                        <StackPanel>
+                            <Button x:Name="AutoColorButton" Height="24" Margin="0,0,0,4"
+                                    HorizontalContentAlignment="Left" Click="AutoColor_Click" />
+                            <UniformGrid x:Name="FontColorGrid" Columns="10" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <!-- Highlight: Word-style split button -->
+                <Button x:Name="HighlightButton" Width="30" Height="28" Margin="1,1,0,1" Padding="0" Click="HighlightButton_Click">
+                    <StackPanel>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE7E6;" FontSize="12" HorizontalAlignment="Center" />
+                        <Rectangle x:Name="HighlightBar" Height="4" Width="16" Fill="Yellow" Margin="0,1,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="HighlightDropButton" Width="14" Height="28" Margin="0,1,1,1" Padding="0" Click="HighlightDrop_Click">
+                    <Path Data="M 0 0 L 6 0 L 3 4 Z" Fill="#444" />
+                </Button>
+                <Popup x:Name="HighlightPopup" StaysOpen="False" Placement="Bottom"
+                       PlacementTarget="{Binding ElementName=HighlightButton}">
+                    <Border Background="White" BorderBrush="#999" BorderThickness="1" Padding="6">
+                        <StackPanel>
+                            <Button x:Name="NoColorButton" Height="24" Margin="0,0,0,4"
+                                    HorizontalContentAlignment="Left" Click="NoHighlight_Click" />
+                            <UniformGrid x:Name="HighlightGrid" Columns="5" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <Separator />
+
+                <!-- Alignment -->
+                <ToggleButton x:Name="AlignLeftButton" Width="30" Height="28" Margin="1" Click="AlignLeft_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8E4;" />
+                </ToggleButton>
+                <ToggleButton x:Name="AlignCenterButton" Width="30" Height="28" Margin="1" Click="AlignCenter_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8E3;" />
+                </ToggleButton>
+                <ToggleButton x:Name="AlignRightButton" Width="30" Height="28" Margin="1" Click="AlignRight_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8E2;" />
+                </ToggleButton>
+                <ToggleButton x:Name="AlignJustifyButton" Width="30" Height="28" Margin="1" Click="AlignJustify_Click">
+                    <TextBlock FontSize="14" Text="≡" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                </ToggleButton>
+
+                <Separator />
+
+                <!-- Lists -->
+                <Button x:Name="BulletsButton" Style="{StaticResource IconButton}" Click="Bullets_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8FD;" />
+                </Button>
+                <Button x:Name="NumberingButton" Style="{StaticResource IconButton}" Click="Numbering_Click">
+                    <TextBlock FontSize="10" TextAlignment="Left" LineHeight="6" VerticalAlignment="Center"
+                               Text="1 —&#x0a;2 —&#x0a;3 —" />
+                </Button>
+
+                <Separator />
+
+                <Button x:Name="ParagraphButton" Style="{StaticResource IconButton}" Click="ParagraphDialog_Click">
+                    <TextBlock FontSize="13" Text="¶" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                </Button>
+                <Button x:Name="InsertImageButton" Style="{StaticResource IconButton}" Click="MenuInsertImage_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8B9;" />
+                </Button>
+
+                <Separator />
+
+                <!-- Page size -->
+                <ComboBox x:Name="PageSizeCombo" Width="70" Height="26" Margin="2"
+                          VerticalContentAlignment="Center"
+                          SelectionChanged="PageSizeCombo_SelectionChanged" />
+            </ToolBar>
+        </ToolBarTray>
+
+        <StatusBar DockPanel.Dock="Bottom" Background="#F3F2F1">
+            <StatusBarItem>
+                <TextBlock x:Name="PageInfoText" Margin="8,0" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Page view: white sheet on gray canvas, like Word -->
+        <ScrollViewer x:Name="PageScroll" Background="#808080"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <Border x:Name="PageBorder" Background="White" Margin="25"
+                    HorizontalAlignment="Center" VerticalAlignment="Top"
+                    BorderBrush="#555" BorderThickness="1" SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" Opacity="0.4" BlurRadius="10" ShadowDepth="3" />
+                </Border.Effect>
+                <Grid>
+                    <RichTextBox x:Name="TextEditor"
+                                 AcceptsTab="True"
+                                 BorderThickness="0"
+                                 Padding="80"
+                                 FontFamily="Calibri" FontSize="16"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Disabled"
+                                 SelectionChanged="TextEditor_SelectionChanged" />
+                    <Canvas x:Name="PageBreakOverlay" IsHitTestVisible="False" />
+                </Grid>
+            </Border>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
