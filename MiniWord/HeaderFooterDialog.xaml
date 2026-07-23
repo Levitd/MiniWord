@@ -24,6 +24,7 @@
             </Grid>
 
             <CheckBox x:Name="PageNumbersCheck" Content="Page numbers" Margin="5,15,0,0" />
+            <CheckBox x:Name="FirstPageCheck" Content="Show on first page" Margin="5,8,0,0" IsChecked="True" />
 
             <Grid Margin="0,8,0,0">
                 <Grid.ColumnDefinitions>

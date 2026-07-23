@@ -48,6 +48,10 @@ namespace MiniWord
             if (_settings == null || !_settings.HasAnyContent)
                 return page;
 
+            // Optionally suppress the header/footer on the first page
+            if (pageNumber == 0 && !_settings.ShowOnFirstPage)
+                return page;
+
             // Compose the original page with a header/footer overlay
             var container = new ContainerVisual();
             container.Children.Add(page.Visual);

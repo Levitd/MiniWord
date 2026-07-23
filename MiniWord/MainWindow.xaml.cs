@@ -21,19 +21,30 @@ namespace MiniWord
         private bool _hasUnsavedChanges;
         private bool _updatingToolbar;
         private readonly DocxService _docxService = new();
-        private readonly AppSettings _settings = AppSettings.Load();
+        private readonly AppSettings _settings = AppSettings.Current;
         private PageSizeInfo _pageSize = PageSizeInfo.All[0];
         private Color _fontColor = Color.FromRgb(0xC0, 0x00, 0x00);
         private Color _highlightColor = Colors.Yellow;
         private DocumentSettings _docSettings = new();
         private int _totalPages = 1;
+        private readonly string? _initialFile;
+
+        // Shared across all windows in the process
+        private static bool _updateCheckedThisProcess;
+        private static int _windowsCreated;
+        private readonly int _windowIndex;
 
         // WPF font sizes are in DIP (1/96"), Word font sizes are in points (1/72")
         private static double PtToDip(double pt) => pt * 96.0 / 72.0;
         private static double DipToPt(double dip) => dip * 72.0 / 96.0;
 
-        public MainWindow()
+        public MainWindow() : this(null) { }
+
+        public MainWindow(string? filePath)
         {
+            _initialFile = filePath;
+            _windowIndex = _windowsCreated++;
+
             InitializeComponent();
             Loc.Lang = _settings.Language;
             RestoreWindowBounds();
@@ -43,6 +54,7 @@ namespace MiniWord
             ApplyEditorDefaults();
             ApplyPageSize(PageSizeInfo.ByName(_settings.PageSize));
             ApplyLocalization();
+            RebuildRecentMenu();
             SetupKeyBindings();
 
             TextEditor.TextChanged += TextEditor_TextChanged;
@@ -53,10 +65,34 @@ namespace MiniWord
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Silent background check: only surface a dialog if an update exists
-            var info = await UpdateService.CheckForUpdateAsync();
-            if (info != null)
-                new UpdateDialog(info) { Owner = this }.ShowDialog();
+            if (!string.IsNullOrEmpty(_initialFile))
+            {
+                LoadFile(_initialFile);
+            }
+            else if (_windowIndex == 0 && _settings.RecentFiles.Count > 0)
+            {
+                ShowStartScreen();
+            }
+
+            // Update handling runs once for the whole process, from the first window
+            if (_windowIndex == 0 && !_updateCheckedThisProcess)
+            {
+                _updateCheckedThisProcess = true;
+
+                if (TryPromptPendingUpdate())
+                    return;
+
+                var info = await UpdateService.CheckForUpdateAsync();
+                if (info != null)
+                    new UpdateDialog(info) { Owner = this }.ShowDialog();
+            }
+        }
+
+        private void ShowStartScreen()
+        {
+            var dlg = new StartDialog(_settings.RecentFiles) { Owner = this };
+            if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.SelectedFile))
+                LoadFile(dlg.SelectedFile);
         }
 
         #region Initialization
@@ -81,12 +117,27 @@ namespace MiniWord
                 Top = _settings.WindowTop.Value;
             }
 
-            if (_settings.WindowMaximized)
+            if (_settings.WindowMaximized && _windowIndex == 0)
                 WindowState = WindowState.Maximized;
+
+            // Cascade additional windows so they don't stack exactly
+            if (_windowIndex > 0)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                WindowState = WindowState.Normal;
+                double offset = 30 * _windowIndex;
+                Left = (_settings.WindowLeft ?? 100) + offset;
+                Top = (_settings.WindowTop ?? 100) + offset;
+            }
         }
 
         private void SaveWindowBounds()
         {
+            // Only the primary window owns the saved bounds; cascaded windows
+            // would otherwise overwrite them with offset positions.
+            if (_windowIndex != 0)
+                return;
+
             _settings.WindowMaximized = WindowState == WindowState.Maximized;
 
             // For a maximized window store its restored (normal) size
@@ -229,6 +280,8 @@ namespace MiniWord
         {
             MenuFile.Header = Loc.T("File");
             MenuNew.Header = Loc.T("New");
+            MenuNewWindow.Header = Loc.T("NewWindow");
+            MenuRecent.Header = Loc.T("RecentFiles");
             MenuOpen.Header = Loc.T("Open");
             MenuSave.Header = Loc.T("Save");
             MenuSaveAs.Header = Loc.T("SaveAs");
@@ -287,16 +340,17 @@ namespace MiniWord
 
         private void SetupKeyBindings()
         {
-            AddKeyBinding(Key.N, (s, e) => MenuFileNew_Click(s, e));
-            AddKeyBinding(Key.O, (s, e) => MenuFileOpen_Click(s, e));
-            AddKeyBinding(Key.S, (s, e) => MenuFileSave_Click(s, e));
-            AddKeyBinding(Key.P, (s, e) => MenuFilePrint_Click(s, e));
+            AddKeyBinding(Key.N, ModifierKeys.Control, (s, e) => MenuFileNew_Click(s, e));
+            AddKeyBinding(Key.N, ModifierKeys.Control | ModifierKeys.Shift, (s, e) => MenuNewWindow_Click(s, e));
+            AddKeyBinding(Key.O, ModifierKeys.Control, (s, e) => MenuFileOpen_Click(s, e));
+            AddKeyBinding(Key.S, ModifierKeys.Control, (s, e) => MenuFileSave_Click(s, e));
+            AddKeyBinding(Key.P, ModifierKeys.Control, (s, e) => MenuFilePrint_Click(s, e));
         }
 
-        private void AddKeyBinding(Key key, ExecutedRoutedEventHandler handler)
+        private void AddKeyBinding(Key key, ModifierKeys modifiers, ExecutedRoutedEventHandler handler)
         {
             var command = new RoutedCommand();
-            command.InputGestures.Add(new KeyGesture(key, ModifierKeys.Control));
+            command.InputGestures.Add(new KeyGesture(key, modifiers));
             CommandBindings.Add(new CommandBinding(command, handler));
         }
 
@@ -355,33 +409,99 @@ namespace MiniWord
 
         private void MenuFileOpen_Click(object sender, RoutedEventArgs e)
         {
-            if (_hasUnsavedChanges && !ConfirmUnsavedChanges())
-                return;
-
             var dlg = new OpenFileDialog
             {
                 Filter = Loc.T("FilterDocx"),
-                DefaultExt = ".docx"
+                DefaultExt = ".docx",
+                Multiselect = true
             };
 
             if (dlg.ShowDialog() != true)
                 return;
 
+            var files = dlg.FileNames;
+
+            // First file goes into this window (if it can accept it),
+            // the rest each open in a new window.
+            int startIndex = 0;
+            if (CanReplaceCurrentDocument())
+            {
+                LoadFile(files[0]);
+                startIndex = 1;
+            }
+
+            for (int i = startIndex; i < files.Length; i++)
+                OpenInNewWindow(files[i]);
+        }
+
+        private bool CanReplaceCurrentDocument()
+        {
+            if (!_hasUnsavedChanges)
+                return true;
+            return ConfirmUnsavedChanges();
+        }
+
+        /// <summary>Loads a .docx into this window.</summary>
+        public void LoadFile(string path)
+        {
             try
             {
-                var doc = _docxService.LoadDocument(dlg.FileName);
+                var doc = _docxService.LoadDocument(path);
                 TextEditor.Document = doc;
                 if (_docxService.LoadedPageSize != null)
                     ApplyPageSize(_docxService.LoadedPageSize);
                 _docSettings = _docxService.LoadedSettings ?? new DocumentSettings();
-                _currentFilePath = dlg.FileName;
+                _currentFilePath = path;
                 _hasUnsavedChanges = false;
                 UpdateTitle();
+
+                _settings.AddRecentFile(path);
+                RebuildRecentMenu();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"{Loc.T("ErrorOpen")}: {ex.Message}", Loc.T("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void OpenInNewWindow(string? path)
+        {
+            var win = new MainWindow(path);
+            win.Show();
+        }
+
+        private void MenuNewWindow_Click(object sender, RoutedEventArgs e) => OpenInNewWindow(null);
+
+        private void RebuildRecentMenu()
+        {
+            MenuRecent.Items.Clear();
+            var recent = _settings.RecentFiles;
+            MenuRecent.IsEnabled = recent.Count > 0;
+
+            for (int i = 0; i < recent.Count; i++)
+            {
+                var path = recent[i];
+                var item = new MenuItem { Header = $"_{i + 1}  {Path.GetFileName(path)}", ToolTip = path };
+                item.Click += (s, _) => OpenRecent(path);
+                MenuRecent.Items.Add(item);
+            }
+        }
+
+        private void OpenRecent(string path)
+        {
+            if (!File.Exists(path))
+            {
+                MessageBox.Show($"{Loc.T("ErrorOpen")}: {path}", Loc.T("Error"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                _settings.RecentFiles.Remove(path);
+                _settings.Save();
+                RebuildRecentMenu();
+                return;
+            }
+
+            if (CanReplaceCurrentDocument())
+                LoadFile(path);
+            else
+                OpenInNewWindow(path);
         }
 
         private void MenuFileSave_Click(object sender, RoutedEventArgs e)
@@ -420,6 +540,8 @@ namespace MiniWord
             {
                 _docxService.SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings);
                 _hasUnsavedChanges = false;
+                _settings.AddRecentFile(filePath);
+                RebuildRecentMenu();
             }
             catch (Exception ex)
             {
@@ -588,6 +710,42 @@ namespace MiniWord
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
             new AboutDialog { Owner = this }.ShowDialog();
+        }
+
+        /// <summary>
+        /// If a background download finished earlier, offer to install it now.
+        /// Returns true if the app is shutting down to install.
+        /// </summary>
+        private bool TryPromptPendingUpdate()
+        {
+            var path = _settings.PendingUpdatePath;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                ClearPendingUpdate();
+                return false;
+            }
+
+            var result = MessageBox.Show(
+                string.Format(Loc.T("PendingUpdateText"), _settings.PendingUpdateVersion),
+                Loc.T("UpdateTitle"), MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                UpdateService.LaunchInstaller(path);
+                Application.Current.Shutdown();
+                return true;
+            }
+
+            return false;
+        }
+
+        private void ClearPendingUpdate()
+        {
+            if (_settings.PendingUpdatePath == null && _settings.PendingUpdateVersion == null)
+                return;
+            _settings.PendingUpdatePath = null;
+            _settings.PendingUpdateVersion = null;
+            _settings.Save();
         }
 
         #endregion
@@ -782,6 +940,19 @@ namespace MiniWord
             }
 
             SaveWindowBounds();
+
+            // When the last window closes, install a background-downloaded
+            // update if one is waiting.
+            bool lastWindow = Application.Current.Windows.OfType<MainWindow>().Count() <= 1;
+            if (lastWindow)
+            {
+                var path = _settings.PendingUpdatePath;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    ClearPendingUpdate();
+                    UpdateService.LaunchInstaller(path);
+                }
+            }
         }
 
         private bool ConfirmUnsavedChanges()

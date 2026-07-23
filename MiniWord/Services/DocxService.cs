@@ -174,9 +174,12 @@ namespace MiniWord.Services
         {
             var settings = new DocumentSettings();
 
-            var header = mainPart.HeaderParts.FirstOrDefault()?.Header;
-            if (header != null)
+            // There may be several header/footer parts (e.g. an empty first-page
+            // one), so read across all of them.
+            foreach (var headerPart in mainPart.HeaderParts)
             {
+                var header = headerPart.Header;
+                if (header == null) continue;
                 foreach (var para in header.Elements<DxPara>())
                 {
                     if (HasPageField(para))
@@ -193,9 +196,10 @@ namespace MiniWord.Services
                 }
             }
 
-            var footer = mainPart.FooterParts.FirstOrDefault()?.Footer;
-            if (footer != null)
+            foreach (var footerPart in mainPart.FooterParts)
             {
+                var footer = footerPart.Footer;
+                if (footer == null) continue;
                 foreach (var para in footer.Elements<DxPara>())
                 {
                     if (HasPageField(para))
@@ -214,6 +218,12 @@ namespace MiniWord.Services
                     }
                 }
             }
+
+            // "Different first page" — header/footer hidden on page 1
+            bool titlePg = mainPart.Document?.Body?
+                .Elements<SectionProperties>()
+                .Any(s => s.Elements<TitlePage>().Any()) ?? false;
+            settings.ShowOnFirstPage = !titlePg;
 
             return settings;
         }
@@ -417,6 +427,9 @@ namespace MiniWord.Services
                     Footer = 720U,
                     Gutter = 0U
                 });
+                // titlePg must follow pgSz/pgMar in the schema order
+                if (settings != null && settings.HasAnyContent && !settings.ShowOnFirstPage)
+                    sectPr.Append(new TitlePage());
                 body.Append(sectPr);
 
                 mainPart.Document = new Document(body);
@@ -692,6 +705,19 @@ namespace MiniWord.Services
                             : JustificationValues.Center));
                 part.Footer = footer;
                 sectPr.Append(new FooterReference { Type = HeaderFooterValues.Default, Id = mainPart.GetIdOfPart(part) });
+            }
+
+            // Blank the first page's header/footer when requested (Word's
+            // "Different first page"): empty first-page parts + titlePg flag.
+            if (!settings.ShowOnFirstPage)
+            {
+                var firstHeaderPart = mainPart.AddNewPart<HeaderPart>();
+                firstHeaderPart.Header = new Header(new DxPara());
+                sectPr.Append(new HeaderReference { Type = HeaderFooterValues.First, Id = mainPart.GetIdOfPart(firstHeaderPart) });
+
+                var firstFooterPart = mainPart.AddNewPart<FooterPart>();
+                firstFooterPart.Footer = new Footer(new DxPara());
+                sectPr.Append(new FooterReference { Type = HeaderFooterValues.First, Id = mainPart.GetIdOfPart(firstFooterPart) });
             }
         }
 

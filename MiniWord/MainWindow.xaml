@@ -12,7 +12,9 @@
         <Menu DockPanel.Dock="Top" Background="#F3F2F1" Padding="5,2">
             <MenuItem x:Name="MenuFile" Header="_File">
                 <MenuItem x:Name="MenuNew" Header="_New" Click="MenuFileNew_Click" InputGestureText="Ctrl+N" />
+                <MenuItem x:Name="MenuNewWindow" Header="New _Window" Click="MenuNewWindow_Click" InputGestureText="Ctrl+Shift+N" />
                 <MenuItem x:Name="MenuOpen" Header="_Open..." Click="MenuFileOpen_Click" InputGestureText="Ctrl+O" />
+                <MenuItem x:Name="MenuRecent" Header="Recent _Files" />
                 <MenuItem x:Name="MenuSave" Header="_Save" Click="MenuFileSave_Click" InputGestureText="Ctrl+S" />
                 <MenuItem x:Name="MenuSaveAs" Header="Save _As..." Click="MenuFileSaveAs_Click" />
                 <Separator />

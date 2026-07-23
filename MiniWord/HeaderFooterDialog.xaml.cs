@@ -17,6 +17,7 @@ namespace MiniWord
             HeaderLabel.Content = Loc.T("HeaderLabel");
             FooterLabel.Content = Loc.T("FooterLabel");
             PageNumbersCheck.Content = Loc.T("PageNumbersCheck");
+            FirstPageCheck.Content = Loc.T("ShowOnFirstPage");
             PositionLabel.Content = Loc.T("PositionLabel");
             OkButton.Content = Loc.T("OK");
             CancelButton.Content = Loc.T("Cancel");
@@ -30,6 +31,7 @@ namespace MiniWord
             HeaderBox.Text = _settings.HeaderText;
             FooterBox.Text = _settings.FooterText;
             PageNumbersCheck.IsChecked = _settings.ShowPageNumbers;
+            FirstPageCheck.IsChecked = _settings.ShowOnFirstPage;
             PositionCombo.SelectedIndex = (int)_settings.PageNumberPosition;
         }
 
@@ -38,6 +40,7 @@ namespace MiniWord
             _settings.HeaderText = HeaderBox.Text.Trim();
             _settings.FooterText = FooterBox.Text.Trim();
             _settings.ShowPageNumbers = PageNumbersCheck.IsChecked == true;
+            _settings.ShowOnFirstPage = FirstPageCheck.IsChecked == true;
             _settings.PageNumberPosition = (PageNumberPosition)System.Math.Max(0, PositionCombo.SelectedIndex);
 
             DialogResult = true;

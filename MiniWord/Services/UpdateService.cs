@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
@@ -34,7 +35,9 @@ namespace MiniWord.Services
             // GitHub API rejects requests without a User-Agent
             client.DefaultRequestHeaders.UserAgent.ParseAdd("MiniWord-Updater");
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-            client.Timeout = TimeSpan.FromSeconds(30);
+            // Kept short so a dead/slow network never delays things noticeably;
+            // the check is non-blocking anyway (the window is already shown).
+            client.Timeout = TimeSpan.FromSeconds(15);
             return client;
         }
 
@@ -45,11 +48,14 @@ namespace MiniWord.Services
         /// Returns update info if the latest release is newer than the running
         /// version, otherwise null. Never throws — network errors return null.
         /// </summary>
-        public static async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
+        public static Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default) =>
+            CheckForUpdateAsync(LatestReleaseApi, ct);
+
+        public static async Task<UpdateInfo?> CheckForUpdateAsync(string apiUrl, CancellationToken ct = default)
         {
             try
             {
-                var json = await Http.GetStringAsync(LatestReleaseApi, ct);
+                var json = await Http.GetStringAsync(apiUrl, ct);
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
@@ -93,14 +99,26 @@ namespace MiniWord.Services
             }
         }
 
+        private static string UpdatesDir
+        {
+            get
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "MiniWord", "updates");
+                Directory.CreateDirectory(dir);
+                return dir;
+            }
+        }
+
         /// <summary>
-        /// Downloads the installer to a temp file, reporting 0..1 progress.
-        /// Returns the local path.
+        /// Downloads the installer to a persistent folder, reporting 0..1
+        /// progress. Returns the local path.
         /// </summary>
         public static async Task<string> DownloadInstallerAsync(
             UpdateInfo info, IProgress<double>? progress, CancellationToken ct = default)
         {
-            var targetPath = Path.Combine(Path.GetTempPath(), info.InstallerName);
+            var targetPath = Path.Combine(UpdatesDir, info.InstallerName);
 
             using var response = await Http.GetAsync(
                 info.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, ct);
@@ -122,6 +140,22 @@ namespace MiniWord.Services
             }
 
             return targetPath;
+        }
+
+        /// <summary>
+        /// Launches the installer after a short delay so this process has time
+        /// to exit and release MiniWord.exe, then quits nothing itself — the
+        /// caller is responsible for shutting the app down.
+        /// </summary>
+        public static void LaunchInstaller(string installerPath)
+        {
+            Process.Start(new ProcessStartInfo("cmd.exe")
+            {
+                Arguments = $"/c timeout /t 3 /nobreak >nul & \"{installerPath}\" /SILENT",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
         }
 
         private static Version? ParseVersion(string tag)
