@@ -6,7 +6,8 @@
     <Grid Margin="20">
         <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <Image Source="MiniWord.ico" Width="48" Height="48" Margin="0,0,12,0" />
+                <Image Source="Assets/logo.png" Width="56" Height="56" Margin="0,0,14,0"
+                       RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Top" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="MiniWord" FontSize="24" FontWeight="Bold" />
                     <TextBlock x:Name="DescriptionText" Foreground="Gray" />

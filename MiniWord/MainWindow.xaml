@@ -41,6 +41,12 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem x:Name="MenuHelp" Header="_Help">
+                <MenuItem x:Name="MenuCheckUpdates" Header="Check for _Updates..." Click="MenuCheckUpdates_Click">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE895;" FontSize="14" VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
                 <MenuItem x:Name="MenuAbout" Header="_About MiniWord..." Click="MenuAbout_Click">
                     <MenuItem.Icon>
                         <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE946;" FontSize="14" VerticalAlignment="Center" />

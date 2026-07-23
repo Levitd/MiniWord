@@ -2,7 +2,7 @@
 ; Build: ISCC.exe MiniWord.iss
 
 #define MyAppName "MiniWord"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Levitd"
 #define MyAppURL "https://github.com/Levitd/MiniWord"
 #define MyAppExeName "MiniWord.exe"
@@ -28,6 +28,10 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; Lets an in-app update replace files while a copy is still running
+AppMutex=MiniWord_App_Mutex_8F2A1C64
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -44,7 +48,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; No skipifsilent: an in-app /SILENT update relaunches MiniWord when done
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall
 
 [CustomMessages]
 english.DotNetMissing=MiniWord requires the .NET 6 Desktop Runtime (or newer), which was not found on this computer.%n%nOpen the download page now? You can continue the installation and install the runtime later.

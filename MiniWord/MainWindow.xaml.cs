@@ -48,6 +48,15 @@ namespace MiniWord
             TextEditor.TextChanged += TextEditor_TextChanged;
             TextEditor.SizeChanged += (s, e) => UpdatePageBreakOverlay();
             Closing += MainWindow_Closing;
+            Loaded += MainWindow_Loaded;
+        }
+
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Silent background check: only surface a dialog if an update exists
+            var info = await UpdateService.CheckForUpdateAsync();
+            if (info != null)
+                new UpdateDialog(info) { Owner = this }.ShowDialog();
         }
 
         #region Initialization
@@ -235,6 +244,7 @@ namespace MiniWord
             MenuTools.Header = Loc.T("Tools");
             MenuSettings.Header = Loc.T("Settings");
             MenuHelp.Header = Loc.T("Help");
+            MenuCheckUpdates.Header = Loc.T("CheckUpdates");
             MenuAbout.Header = Loc.T("About");
 
             OpenButton.ToolTip = Loc.T("TipOpen");
@@ -551,6 +561,29 @@ namespace MiniWord
         #endregion
 
         #region Menu - Help
+
+        private async void MenuCheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            MenuCheckUpdates.IsEnabled = false;
+            try
+            {
+                var info = await UpdateService.CheckForUpdateAsync();
+                if (info != null)
+                {
+                    new UpdateDialog(info) { Owner = this }.ShowDialog();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        string.Format(Loc.T("UpToDateText"), UpdateService.CurrentVersion.ToString(3)),
+                        Loc.T("UpToDateTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            finally
+            {
+                MenuCheckUpdates.IsEnabled = true;
+            }
+        }
 
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
