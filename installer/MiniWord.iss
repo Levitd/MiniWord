@@ -2,7 +2,7 @@
 ; Build: ISCC.exe MiniWord.iss
 
 #define MyAppName "MiniWord"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Levitd"
 #define MyAppURL "https://github.com/Levitd/MiniWord"
 #define MyAppExeName "MiniWord.exe"

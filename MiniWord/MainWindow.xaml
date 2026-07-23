@@ -40,6 +40,13 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
+            <MenuItem x:Name="MenuHelp" Header="_Help">
+                <MenuItem x:Name="MenuAbout" Header="_About MiniWord..." Click="MenuAbout_Click">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE946;" FontSize="14" VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
         </Menu>
 
         <ToolBarTray DockPanel.Dock="Top" Background="#F3F2F1">

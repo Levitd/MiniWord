@@ -29,6 +29,13 @@ namespace MiniWord.Services
             ["HeaderFooter"] = ("_Header && Footer...", "_Колонтитулы и нумерация..."),
             ["Tools"] = ("_Tools", "С_ервис"),
             ["Settings"] = ("_Settings...", "_Настройки..."),
+            ["Help"] = ("_Help", "_Справка"),
+            ["About"] = ("_About MiniWord...", "_О программе..."),
+            ["AboutTitle"] = ("About MiniWord", "О программе MiniWord"),
+            ["AboutDescription"] = ("Lightweight free .docx editor for Windows", "Лёгкий бесплатный редактор .docx для Windows"),
+            ["VersionLabel"] = ("Version:", "Версия:"),
+            ["ReleaseDateLabel"] = ("Release date:", "Дата релиза:"),
+            ["AuthorLabel"] = ("Author:", "Автор:"),
 
             // Toolbar tooltips
             ["TipOpen"] = ("Open (Ctrl+O)", "Открыть (Ctrl+O)"),

@@ -36,6 +36,7 @@ namespace MiniWord
         {
             InitializeComponent();
             Loc.Lang = _settings.Language;
+            RestoreWindowBounds();
 
             InitializeToolbar();
             InitializeColorPalettes();
@@ -50,6 +51,49 @@ namespace MiniWord
         }
 
         #region Initialization
+
+        private void RestoreWindowBounds()
+        {
+            if (_settings.WindowWidth > 300 && _settings.WindowHeight > 200)
+            {
+                Width = _settings.WindowWidth;
+                Height = _settings.WindowHeight;
+            }
+
+            // Restore position only if it is still on a connected screen
+            if (_settings.WindowLeft.HasValue && _settings.WindowTop.HasValue
+                && _settings.WindowLeft.Value > SystemParameters.VirtualScreenLeft - 50
+                && _settings.WindowTop.Value > SystemParameters.VirtualScreenTop - 50
+                && _settings.WindowLeft.Value < SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 100
+                && _settings.WindowTop.Value < SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 100)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = _settings.WindowLeft.Value;
+                Top = _settings.WindowTop.Value;
+            }
+
+            if (_settings.WindowMaximized)
+                WindowState = WindowState.Maximized;
+        }
+
+        private void SaveWindowBounds()
+        {
+            _settings.WindowMaximized = WindowState == WindowState.Maximized;
+
+            // For a maximized window store its restored (normal) size
+            var bounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+            if (bounds.Width > 300 && bounds.Height > 200)
+            {
+                _settings.WindowWidth = bounds.Width;
+                _settings.WindowHeight = bounds.Height;
+                _settings.WindowLeft = bounds.Left;
+                _settings.WindowTop = bounds.Top;
+            }
+
+            _settings.Save();
+        }
 
         private void InitializeToolbar()
         {
@@ -190,6 +234,8 @@ namespace MiniWord
             MenuHeaderFooter.Header = Loc.T("HeaderFooter");
             MenuTools.Header = Loc.T("Tools");
             MenuSettings.Header = Loc.T("Settings");
+            MenuHelp.Header = Loc.T("Help");
+            MenuAbout.Header = Loc.T("About");
 
             OpenButton.ToolTip = Loc.T("TipOpen");
             SaveButton.ToolTip = Loc.T("TipSave");
@@ -504,6 +550,15 @@ namespace MiniWord
 
         #endregion
 
+        #region Menu - Help
+
+        private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            new AboutDialog { Owner = this }.ShowDialog();
+        }
+
+        #endregion
+
         #region Toolbar - Font
 
         private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -688,7 +743,12 @@ namespace MiniWord
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             if (_hasUnsavedChanges && !ConfirmUnsavedChanges())
+            {
                 e.Cancel = true;
+                return;
+            }
+
+            SaveWindowBounds();
         }
 
         private bool ConfirmUnsavedChanges()

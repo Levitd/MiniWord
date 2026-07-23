@@ -11,6 +11,13 @@ namespace MiniWord.Models
         public string Language { get; set; } = "en";
         public string PageSize { get; set; } = "A4";
 
+        // Window bounds from the last session (0 / null = not saved yet)
+        public double WindowWidth { get; set; }
+        public double WindowHeight { get; set; }
+        public double? WindowLeft { get; set; }
+        public double? WindowTop { get; set; }
+        public bool WindowMaximized { get; set; }
+
         private static string SettingsPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "MiniWord", "settings.json");
