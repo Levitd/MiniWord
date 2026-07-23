@@ -4,7 +4,7 @@
 #define MyAppName "MiniWord"
 ; Override from the command line with: ISCC /DMyAppVersion=x.y.z
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.0"
+  #define MyAppVersion "1.3.1"
 #endif
 #define MyAppPublisher "Levitd"
 #define MyAppURL "https://github.com/Levitd/MiniWord"
@@ -49,6 +49,14 @@ Source: "{#PublishDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+; Register MiniWord as an "Open with" handler for .docx, pointing at the
+; installed exe so the association always tracks the current version.
+; HKA = HKLM when elevated, HKCU otherwise (matches PrivilegesRequired).
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".docx"; ValueData: ""
 
 [Run]
 ; No skipifsilent: an in-app /SILENT update relaunches MiniWord when done
