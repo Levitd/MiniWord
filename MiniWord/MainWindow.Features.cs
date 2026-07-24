@@ -552,6 +552,30 @@ namespace MiniWord
             }
         }
 
+        private void MenuExportHtml_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = Loc.T("FilterHtml"),
+                DefaultExt = ".html",
+                FileName = string.IsNullOrEmpty(_currentFilePath)
+                    ? Loc.T("DefaultDocName")
+                    : Path.GetFileNameWithoutExtension(_currentFilePath)
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            try
+            {
+                HtmlExportService.Export(TextEditor.Document, dlg.FileName, _pageSize);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{Loc.T("ErrorSave")}: {ex.Message}", Loc.T("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         #endregion
 
         #region Autosave / recovery

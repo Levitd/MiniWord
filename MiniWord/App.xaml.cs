@@ -13,16 +13,19 @@ namespace MiniWord
         public const string AppMutexName = "MiniWord_App_Mutex_8F2A1C64";
         private Mutex? _mutex;
 
+        // Extensions MiniWord can open (HTML/PDF are export-only, not listed).
+        private static readonly string[] OpenableExtensions = { ".docx", ".rtf", ".odt", ".txt" };
+
         protected override void OnStartup(StartupEventArgs e)
         {
             _mutex = new Mutex(true, AppMutexName);
             base.OnStartup(e);
 
-            // Open any .docx paths passed on the command line (file association
-            // / "Open with"), each in its own window.
+            // Open any supported document passed on the command line (file
+            // association / "Open with"), each in its own window.
             var files = e.Args
                 .Where(a => File.Exists(a) &&
-                            a.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
+                            OpenableExtensions.Any(ext => a.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
 
             if (files.Count > 0)

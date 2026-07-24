@@ -311,6 +311,7 @@ namespace MiniWord
             MenuInsertPageBreak.Header = Loc.T("PageBreak");
             MenuHeaderFooter.Header = Loc.T("HeaderFooter");
             MenuExportPdf.Header = Loc.T("ExportPdf");
+            MenuExportHtml.Header = Loc.T("ExportHtml");
             MenuTools.Header = Loc.T("Tools");
             MenuSettings.Header = Loc.T("Settings");
             MenuHelp.Header = Loc.T("Help");
@@ -494,16 +495,27 @@ namespace MiniWord
             return ConfirmUnsavedChanges();
         }
 
-        /// <summary>Loads a .docx into this window.</summary>
+        /// <summary>Picks the reader/writer for a path by its extension (.docx default).</summary>
+        private IDocumentFormat GetFormatService(string path) =>
+            Path.GetExtension(path).ToLowerInvariant() switch
+            {
+                ".rtf" => new RtfService(),
+                ".txt" => new TxtService(),
+                ".odt" => new OdtService(),
+                _ => _docxService,
+            };
+
+        /// <summary>Loads a document (docx/rtf/odt/txt) into this window.</summary>
         public void LoadFile(string path)
         {
             try
             {
-                var doc = _docxService.LoadDocument(path);
+                var svc = GetFormatService(path);
+                var doc = svc.LoadDocument(path);
                 TextEditor.Document = doc;
-                if (_docxService.LoadedPageSize != null)
-                    ApplyPageSize(_docxService.LoadedPageSize);
-                _docSettings = _docxService.LoadedSettings ?? new DocumentSettings();
+                if (svc.LoadedPageSize != null)
+                    ApplyPageSize(svc.LoadedPageSize);
+                _docSettings = svc.LoadedSettings ?? new DocumentSettings();
                 _currentFilePath = path;
                 _hasUnsavedChanges = false;
                 UpdateTitle();
@@ -591,7 +603,7 @@ namespace MiniWord
         {
             try
             {
-                _docxService.SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings);
+                GetFormatService(filePath).SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings);
                 _hasUnsavedChanges = false;
                 _draftDirty = false;
                 DeleteDraft();

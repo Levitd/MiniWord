@@ -21,6 +21,7 @@
                 <MenuItem x:Name="MenuPreview" Header="Print Pre_view..." Click="MenuFilePreview_Click" />
                 <MenuItem x:Name="MenuPrint" Header="P_rint..." Click="MenuFilePrint_Click" InputGestureText="Ctrl+P" />
                 <MenuItem x:Name="MenuExportPdf" Header="_Export to PDF..." Click="MenuExportPdf_Click" />
+                <MenuItem x:Name="MenuExportHtml" Header="Export to _HTML..." Click="MenuExportHtml_Click" />
                 <Separator />
                 <MenuItem x:Name="MenuExit" Header="E_xit" Click="MenuFileExit_Click" />
             </MenuItem>

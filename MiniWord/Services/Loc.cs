@@ -40,6 +40,7 @@ namespace MiniWord.Services
             ["PageBreak"] = ("Page _Break", "Разрыв _страницы"),
             ["HeaderFooter"] = ("_Header && Footer...", "_Колонтитулы и нумерация..."),
             ["ExportPdf"] = ("_Export to PDF...", "_Экспорт в PDF..."),
+            ["ExportHtml"] = ("Export to _HTML...", "Экспорт в _HTML..."),
             ["Tools"] = ("_Tools", "С_ервис"),
             ["Settings"] = ("_Settings...", "_Настройки..."),
             ["Help"] = ("_Help", "_Справка"),
@@ -61,7 +62,7 @@ namespace MiniWord.Services
             ["UpToDateText"] = ("You have the latest version ({0}).", "У вас установлена последняя версия ({0})."),
             ["CheckFailed"] = ("Could not check for updates. Please try again later.", "Не удалось проверить обновления. Попробуйте позже."),
             ["AboutTitle"] = ("About MiniWord", "О программе MiniWord"),
-            ["AboutDescription"] = ("Lightweight free .docx editor for Windows", "Лёгкий бесплатный редактор .docx для Windows"),
+            ["AboutDescription"] = ("Lightweight free editor for .docx, .rtf, .odt and .txt", "Лёгкий бесплатный редактор .docx, .rtf, .odt и .txt"),
             ["VersionLabel"] = ("Version:", "Версия:"),
             ["ReleaseDateLabel"] = ("Release date:", "Дата релиза:"),
             ["AuthorLabel"] = ("Author:", "Автор:"),
@@ -170,8 +171,13 @@ namespace MiniWord.Services
             ["Error"] = ("Error", "Ошибка"),
             ["ErrorOpen"] = ("Error opening file", "Ошибка при открытии файла"),
             ["ErrorSave"] = ("Error saving file", "Ошибка при сохранении файла"),
-            ["FilterDocx"] = ("Word Documents (*.docx)|*.docx|All Files (*.*)|*.*", "Документы Word (*.docx)|*.docx|Все файлы (*.*)|*.*"),
-            ["FilterDocxSave"] = ("Word Documents (*.docx)|*.docx", "Документы Word (*.docx)|*.docx"),
+            ["FilterDocx"] = (
+                "All supported documents (*.docx;*.rtf;*.odt;*.txt)|*.docx;*.rtf;*.odt;*.txt|Word Document (*.docx)|*.docx|Rich Text Format (*.rtf)|*.rtf|OpenDocument Text (*.odt)|*.odt|Plain Text (*.txt)|*.txt|All Files (*.*)|*.*",
+                "Все поддерживаемые документы (*.docx;*.rtf;*.odt;*.txt)|*.docx;*.rtf;*.odt;*.txt|Документ Word (*.docx)|*.docx|Rich Text Format (*.rtf)|*.rtf|OpenDocument Text (*.odt)|*.odt|Обычный текст (*.txt)|*.txt|Все файлы (*.*)|*.*"),
+            ["FilterDocxSave"] = (
+                "Word Document (*.docx)|*.docx|Rich Text Format (*.rtf)|*.rtf|OpenDocument Text (*.odt)|*.odt|Plain Text (*.txt)|*.txt",
+                "Документ Word (*.docx)|*.docx|Rich Text Format (*.rtf)|*.rtf|OpenDocument Text (*.odt)|*.odt|Обычный текст (*.txt)|*.txt"),
+            ["FilterHtml"] = ("HTML Page (*.html)|*.html", "HTML-страница (*.html)|*.html"),
             ["FilterImages"] = ("Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif", "Изображения (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif"),
             ["DefaultDocName"] = ("Document", "Документ"),
         };

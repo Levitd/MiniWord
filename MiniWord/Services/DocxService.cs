@@ -36,7 +36,7 @@ using WpfRun = System.Windows.Documents.Run;
 
 namespace MiniWord.Services
 {
-    public class DocxService
+    public class DocxService : IDocumentFormat
     {
         // Unit conversions:
         //   WPF works in DIP (1/96 inch)
