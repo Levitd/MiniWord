@@ -17,6 +17,7 @@ namespace MiniWord
             InitializeComponent();
             _textEditor = textEditor;
             ApplyLocalization();
+            WireValueLabels();
             LoadCurrentSettings();
         }
 
@@ -34,40 +35,49 @@ namespace MiniWord
             CancelButton.Content = Loc.T("Cancel");
         }
 
+        private void WireValueLabels()
+        {
+            Bind(LeftIndentSlider, LeftIndentValue);
+            Bind(RightIndentSlider, RightIndentValue);
+            Bind(FirstLineIndentSlider, FirstLineIndentValue);
+            Bind(LineSpacingSlider, LineSpacingValue);
+            Bind(SpaceBeforeSlider, SpaceBeforeValue);
+            Bind(SpaceAfterSlider, SpaceAfterValue);
+        }
+
+        private static void Bind(Slider slider, TextBlock label)
+        {
+            slider.ValueChanged += (s, e) => label.Text = slider.Value.ToString("F0");
+            label.Text = slider.Value.ToString("F0");
+        }
+
         private void LoadCurrentSettings()
         {
             var para = _textEditor.Selection.Start?.Paragraph;
             if (para == null)
                 return;
 
-            LeftIndentBox.Text = DipToPt(para.Margin.Left).ToString("F0");
-            RightIndentBox.Text = DipToPt(para.Margin.Right).ToString("F0");
-            SpaceBeforeBox.Text = DipToPt(para.Margin.Top).ToString("F0");
-            SpaceAfterBox.Text = DipToPt(para.Margin.Bottom).ToString("F0");
-            FirstLineIndentBox.Text = DipToPt(para.TextIndent).ToString("F0");
+            LeftIndentSlider.Value = DipToPt(para.Margin.Left);
+            RightIndentSlider.Value = DipToPt(para.Margin.Right);
+            SpaceBeforeSlider.Value = DipToPt(para.Margin.Top);
+            SpaceAfterSlider.Value = DipToPt(para.Margin.Bottom);
+            FirstLineIndentSlider.Value = DipToPt(para.TextIndent);
 
             if (para.LineHeight > 0 && !double.IsNaN(para.LineHeight))
-                LineSpacingBox.Text = DipToPt(para.LineHeight).ToString("F0");
+                LineSpacingSlider.Value = DipToPt(para.LineHeight);
         }
 
         private void OK_Click(object sender, RoutedEventArgs e)
         {
-            double.TryParse(LeftIndentBox.Text, out var leftIndent);
-            double.TryParse(RightIndentBox.Text, out var rightIndent);
-            double.TryParse(FirstLineIndentBox.Text, out var firstLineIndent);
-            double.TryParse(SpaceBeforeBox.Text, out var spaceBefore);
-            double.TryParse(SpaceAfterBox.Text, out var spaceAfter);
-            double.TryParse(LineSpacingBox.Text, out var lineSpacing);
-
             var para = _textEditor.Selection.Start?.Paragraph;
             if (para != null)
             {
                 para.Margin = new Thickness(
-                    PtToDip(leftIndent), PtToDip(spaceBefore),
-                    PtToDip(rightIndent), PtToDip(spaceAfter));
-                para.TextIndent = PtToDip(firstLineIndent);
-                if (lineSpacing > 0)
-                    para.LineHeight = PtToDip(lineSpacing);
+                    PtToDip(LeftIndentSlider.Value), PtToDip(SpaceBeforeSlider.Value),
+                    PtToDip(RightIndentSlider.Value), PtToDip(SpaceAfterSlider.Value));
+                para.TextIndent = PtToDip(FirstLineIndentSlider.Value);
+                if (LineSpacingSlider.Value > 0)
+                    para.LineHeight = PtToDip(LineSpacingSlider.Value);
             }
 
             DialogResult = true;

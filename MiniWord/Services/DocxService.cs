@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -18,6 +19,11 @@ using DxPageSize = DocumentFormat.OpenXml.Wordprocessing.PageSize;
 using DxPara = DocumentFormat.OpenXml.Wordprocessing.Paragraph;
 using DxRun = DocumentFormat.OpenXml.Wordprocessing.Run;
 using DxUnderline = DocumentFormat.OpenXml.Wordprocessing.Underline;
+using DxStrike = DocumentFormat.OpenXml.Wordprocessing.Strike;
+using DxHyperlink = DocumentFormat.OpenXml.Wordprocessing.Hyperlink;
+using DxBreak = DocumentFormat.OpenXml.Wordprocessing.Break;
+using WpfHyperlink = System.Windows.Documents.Hyperlink;
+using WpfInline = System.Windows.Documents.Inline;
 using MediaColor = System.Windows.Media.Color;
 using MediaColors = System.Windows.Media.Colors;
 using SolidBrush = System.Windows.Media.SolidColorBrush;
@@ -122,25 +128,53 @@ namespace MiniWord.Services
             var flowPara = new WpfPara();
             ReadParagraphProperties(dxPara.ParagraphProperties, flowPara);
 
-            foreach (var dxRun in dxPara.Elements<DxRun>())
-            {
-                foreach (var drawing in dxRun.Descendants<Drawing>())
-                {
-                    var image = ReadImage(mainPart, drawing);
-                    if (image != null)
-                        flowPara.Inlines.Add(new InlineUIContainer(image));
-                }
+            // A run with a page break marks this as a manual page break paragraph
+            if (dxPara.Descendants<DxBreak>().Any(b => b.Type != null && b.Type.Value == BreakValues.Page))
+                flowPara.Tag = "PageBreak";
 
-                var text = string.Concat(dxRun.Elements<Text>().Select(t => t.Text));
-                if (text.Length > 0)
+            foreach (var child in dxPara.ChildElements)
+            {
+                if (child is DxRun dxRun)
                 {
-                    var flowRun = new WpfRun(text);
-                    ReadRunProperties(dxRun.RunProperties, flowRun);
-                    flowPara.Inlines.Add(flowRun);
+                    foreach (var inline in BuildInlines(dxRun, mainPart))
+                        flowPara.Inlines.Add(inline);
+                }
+                else if (child is DxHyperlink hl)
+                {
+                    var wpfLink = new WpfHyperlink();
+                    var rel = mainPart.HyperlinkRelationships.FirstOrDefault(r => r.Id == hl.Id);
+                    if (rel != null)
+                    {
+                        wpfLink.NavigateUri = rel.Uri;
+                        wpfLink.ToolTip = rel.Uri.ToString();
+                    }
+                    foreach (var run in hl.Elements<DxRun>())
+                        foreach (var inline in BuildInlines(run, mainPart))
+                            wpfLink.Inlines.Add(inline);
+                    if (wpfLink.Inlines.Count > 0)
+                        flowPara.Inlines.Add(wpfLink);
                 }
             }
 
             return flowPara;
+        }
+
+        private static IEnumerable<WpfInline> BuildInlines(DxRun dxRun, MainDocumentPart mainPart)
+        {
+            foreach (var drawing in dxRun.Descendants<Drawing>())
+            {
+                var image = ReadImage(mainPart, drawing);
+                if (image != null)
+                    yield return new InlineUIContainer(image);
+            }
+
+            var text = string.Concat(dxRun.Elements<Text>().Select(t => t.Text));
+            if (text.Length > 0)
+            {
+                var flowRun = new WpfRun(text);
+                ReadRunProperties(dxRun.RunProperties, flowRun);
+                yield return flowRun;
+            }
         }
 
         private static TextMarkerStyle ResolveMarker(MainDocumentPart mainPart, int numId)
@@ -285,8 +319,25 @@ namespace MiniWord.Services
                 flowRun.FontWeight = FontWeights.Bold;
             if (rPr.Italic != null)
                 flowRun.FontStyle = FontStyles.Italic;
-            if (rPr.Underline != null)
-                flowRun.TextDecorations = TextDecorations.Underline;
+
+            if (rPr.Underline != null || rPr.Strike != null)
+            {
+                var decorations = new TextDecorationCollection();
+                if (rPr.Underline != null)
+                    decorations.Add(TextDecorations.Underline[0]);
+                if (rPr.Strike != null)
+                    decorations.Add(TextDecorations.Strikethrough[0]);
+                flowRun.TextDecorations = decorations;
+            }
+
+            if (rPr.VerticalTextAlignment?.Val != null)
+            {
+                var v = rPr.VerticalTextAlignment.Val.Value;
+                if (v == VerticalPositionValues.Superscript)
+                    flowRun.BaselineAlignment = BaselineAlignment.Superscript;
+                else if (v == VerticalPositionValues.Subscript)
+                    flowRun.BaselineAlignment = BaselineAlignment.Subscript;
+            }
 
             if (rPr.FontSize?.Val != null && double.TryParse(rPr.FontSize.Val.Value, out var halfPoints))
                 flowRun.FontSize = HalfPointsToDip(halfPoints);
@@ -494,9 +545,20 @@ namespace MiniWord.Services
 
             dxPara.Append(pPr);
 
+            // Manual page break: emit a run carrying a page break
+            if (flowPara.Tag as string == "PageBreak")
+            {
+                dxPara.Append(new DxRun(new DxBreak { Type = BreakValues.Page }));
+                return dxPara;
+            }
+
             foreach (var inline in flowPara.Inlines)
             {
-                if (inline is WpfRun flowRun)
+                if (inline is WpfHyperlink link)
+                {
+                    dxPara.Append(BuildHyperlink(mainPart, link));
+                }
+                else if (inline is WpfRun flowRun)
                 {
                     dxPara.Append(BuildTextRun(flowRun));
                 }
@@ -512,6 +574,40 @@ namespace MiniWord.Services
             }
 
             return dxPara;
+        }
+
+        private static DxHyperlink BuildHyperlink(MainDocumentPart mainPart, WpfHyperlink link)
+        {
+            var hyperlink = new DxHyperlink();
+            var uri = link.NavigateUri?.ToString();
+            if (!string.IsNullOrEmpty(uri))
+            {
+                var rel = mainPart.AddHyperlinkRelationship(new Uri(uri, UriKind.RelativeOrAbsolute), true);
+                hyperlink.Id = rel.Id;
+            }
+            foreach (var inner in link.Inlines)
+            {
+                if (inner is WpfRun run)
+                {
+                    var dxRun = BuildTextRun(run);
+                    // Colour/underline hyperlinks the way Word does
+                    var rPr = dxRun.GetFirstChild<RunProperties>() ?? dxRun.PrependChild(new RunProperties());
+                    if (rPr.Color == null) rPr.Append(new DxColor { Val = "0563C1" });
+                    if (rPr.Underline == null) rPr.Append(new DxUnderline { Val = UnderlineValues.Single });
+                    hyperlink.Append(dxRun);
+                }
+            }
+            return hyperlink;
+        }
+
+        private static bool HasDecoration(TextDecorationCollection? decorations, TextDecorationLocation location)
+        {
+            if (decorations == null)
+                return false;
+            foreach (var d in decorations)
+                if (d.Location == location)
+                    return true;
+            return false;
         }
 
         private static ParagraphProperties BuildParagraphProperties(WpfPara flowPara)
@@ -569,8 +665,16 @@ namespace MiniWord.Services
             if (flowRun.FontStyle == FontStyles.Italic)
                 rPr.Append(new DxItalic());
 
-            if (flowRun.TextDecorations?.Count > 0)
+            if (HasDecoration(flowRun.TextDecorations, TextDecorationLocation.Underline))
                 rPr.Append(new DxUnderline { Val = UnderlineValues.Single });
+
+            if (HasDecoration(flowRun.TextDecorations, TextDecorationLocation.Strikethrough))
+                rPr.Append(new DxStrike());
+
+            if (flowRun.BaselineAlignment == BaselineAlignment.Superscript)
+                rPr.Append(new VerticalTextAlignment { Val = VerticalPositionValues.Superscript });
+            else if (flowRun.BaselineAlignment == BaselineAlignment.Subscript)
+                rPr.Append(new VerticalTextAlignment { Val = VerticalPositionValues.Subscript });
 
             // Only save an explicitly set text color, not the inherited default
             if (flowRun.ReadLocalValue(TextElement.ForegroundProperty) != DependencyProperty.UnsetValue

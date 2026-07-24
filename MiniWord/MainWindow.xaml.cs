@@ -61,6 +61,8 @@ namespace MiniWord
             TextEditor.SizeChanged += (s, e) => UpdatePageBreakOverlay();
             Closing += MainWindow_Closing;
             Loaded += MainWindow_Loaded;
+
+            InitializeFeatures();
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -69,9 +71,11 @@ namespace MiniWord
             {
                 LoadFile(_initialFile);
             }
-            else if (_windowIndex == 0 && _settings.RecentFiles.Count > 0)
+            else
             {
-                ShowStartScreen();
+                CheckForRecoverableDraft();
+                if (_windowIndex == 0 && _settings.RecentFiles.Count > 0 && !_hasUnsavedChanges)
+                    ShowStartScreen();
             }
 
             // Update handling runs once for the whole process, from the first window
@@ -264,6 +268,8 @@ namespace MiniWord
                 });
             }
 
+            DrawParagraphMarks();
+            DrawPageDecorations(contentPerPage);
             UpdatePageStatus();
         }
 
@@ -291,9 +297,20 @@ namespace MiniWord
             MenuEdit.Header = Loc.T("Edit");
             MenuUndo.Header = Loc.T("Undo");
             MenuRedo.Header = Loc.T("Redo");
+            MenuCut.Header = Loc.T("Cut");
+            MenuCopy.Header = Loc.T("Copy");
+            MenuPaste.Header = Loc.T("Paste");
+            MenuPasteText.Header = Loc.T("PasteText");
+            MenuSelectAll.Header = Loc.T("SelectAll");
+            MenuFind.Header = Loc.T("Find");
+            MenuReplace.Header = Loc.T("Replace");
             MenuInsert.Header = Loc.T("Insert");
             MenuInsertImage.Header = Loc.T("Image");
+            MenuInsertHyperlink.Header = Loc.T("Hyperlink");
+            MenuInsertSymbol.Header = Loc.T("Symbol");
+            MenuInsertPageBreak.Header = Loc.T("PageBreak");
             MenuHeaderFooter.Header = Loc.T("HeaderFooter");
+            MenuExportPdf.Header = Loc.T("ExportPdf");
             MenuTools.Header = Loc.T("Tools");
             MenuSettings.Header = Loc.T("Settings");
             MenuHelp.Header = Loc.T("Help");
@@ -310,6 +327,20 @@ namespace MiniWord
             BoldButton.ToolTip = Loc.T("TipBold");
             ItalicButton.ToolTip = Loc.T("TipItalic");
             UnderlineButton.ToolTip = Loc.T("TipUnderline");
+            StrikeButton.ToolTip = Loc.T("TipStrikethrough");
+            SuperscriptButton.ToolTip = Loc.T("TipSuperscript");
+            SubscriptButton.ToolTip = Loc.T("TipSubscript");
+            ChangeCaseButton.ToolTip = Loc.T("TipChangeCase");
+            CutButton.ToolTip = Loc.T("TipCut");
+            CopyButton.ToolTip = Loc.T("TipCopy");
+            PasteButton.ToolTip = Loc.T("TipPaste");
+            FormatPainterButton.ToolTip = Loc.T("TipFormatPainter");
+            LineSpacingButton.ToolTip = Loc.T("TipLineSpacing");
+            ShowMarksButton.ToolTip = Loc.T("TipShowMarks");
+            CaseSentenceItem.Header = Loc.T("CaseSentence");
+            CaseLowerItem.Header = Loc.T("CaseLower");
+            CaseUpperItem.Header = Loc.T("CaseUpper");
+            CaseTitleItem.Header = Loc.T("CaseTitle");
             FontColorButton.ToolTip = Loc.T("TipFontColor");
             FontColorDropButton.ToolTip = Loc.T("TipFontColor");
             HighlightButton.ToolTip = Loc.T("TipHighlight");
@@ -345,6 +376,11 @@ namespace MiniWord
             AddKeyBinding(Key.O, ModifierKeys.Control, (s, e) => MenuFileOpen_Click(s, e));
             AddKeyBinding(Key.S, ModifierKeys.Control, (s, e) => MenuFileSave_Click(s, e));
             AddKeyBinding(Key.P, ModifierKeys.Control, (s, e) => MenuFilePrint_Click(s, e));
+            AddKeyBinding(Key.V, ModifierKeys.Control | ModifierKeys.Shift, (s, e) => MenuPasteText_Click(s, e));
+            AddKeyBinding(Key.F, ModifierKeys.Control, (s, e) => MenuFind_Click(s, e));
+            AddKeyBinding(Key.H, ModifierKeys.Control, (s, e) => MenuReplace_Click(s, e));
+            AddKeyBinding(Key.K, ModifierKeys.Control, (s, e) => MenuHyperlink_Click(s, e));
+            AddKeyBinding(Key.Enter, ModifierKeys.Control, (s, e) => MenuPageBreak_Click(s, e));
         }
 
         private void AddKeyBinding(Key key, ModifierKeys modifiers, ExecutedRoutedEventHandler handler)
@@ -359,6 +395,8 @@ namespace MiniWord
         private void TextEditor_TextChanged(object sender, TextChangedEventArgs e)
         {
             _hasUnsavedChanges = true;
+            UpdateWordCount();
+            MarkDraftDirty();
         }
 
         private void UpdateToolbarState()
@@ -379,8 +417,13 @@ namespace MiniWord
             var fontStyle = TextEditor.Selection.GetPropertyValue(TextBlock.FontStyleProperty);
             ItalicButton.IsChecked = fontStyle is FontStyle fs && fs == FontStyles.Italic;
 
-            var decoration = TextEditor.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
-            UnderlineButton.IsChecked = decoration is TextDecorationCollection tdc && tdc.Count > 0;
+            var decoration = TextEditor.Selection.GetPropertyValue(Inline.TextDecorationsProperty) as TextDecorationCollection;
+            UnderlineButton.IsChecked = HasDecoration(decoration, TextDecorationLocation.Underline);
+            StrikeButton.IsChecked = HasDecoration(decoration, TextDecorationLocation.Strikethrough);
+
+            var baseline = TextEditor.Selection.GetPropertyValue(Inline.BaselineAlignmentProperty);
+            SuperscriptButton.IsChecked = baseline is BaselineAlignment ba1 && ba1 == BaselineAlignment.Superscript;
+            SubscriptButton.IsChecked = baseline is BaselineAlignment ba2 && ba2 == BaselineAlignment.Subscript;
 
             var alignment = TextEditor.Selection.Start.Paragraph?.TextAlignment;
             AlignLeftButton.IsChecked = alignment == TextAlignment.Left;
@@ -389,6 +432,16 @@ namespace MiniWord
             AlignJustifyButton.IsChecked = alignment == TextAlignment.Justify;
 
             _updatingToolbar = false;
+        }
+
+        private static bool HasDecoration(TextDecorationCollection? decorations, TextDecorationLocation location)
+        {
+            if (decorations == null)
+                return false;
+            foreach (var d in decorations)
+                if (d.Location == location)
+                    return true;
+            return false;
         }
 
         #region Menu - File
@@ -540,6 +593,8 @@ namespace MiniWord
             {
                 _docxService.SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings);
                 _hasUnsavedChanges = false;
+                _draftDirty = false;
+                DeleteDraft();
                 _settings.AddRecentFile(filePath);
                 RebuildRecentMenu();
             }
@@ -662,7 +717,10 @@ namespace MiniWord
         {
             var dlg = new HeaderFooterDialog(_docSettings) { Owner = this };
             if (dlg.ShowDialog() == true)
+            {
                 _hasUnsavedChanges = true;
+                UpdatePageBreakOverlay();
+            }
         }
 
         #endregion
@@ -802,12 +860,7 @@ namespace MiniWord
 
         private void UnderlineButton_Click(object sender, RoutedEventArgs e)
         {
-            var decoration = TextEditor.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
-            bool isUnderlined = decoration is TextDecorationCollection tdc && tdc.Count > 0;
-            TextEditor.Selection.ApplyPropertyValue(Inline.TextDecorationsProperty,
-                isUnderlined ? null : TextDecorations.Underline);
-            UpdateToolbarState();
-            TextEditor.Focus();
+            ToggleTextDecoration(TextDecorations.Underline[0]);
         }
 
         #endregion
@@ -940,6 +993,10 @@ namespace MiniWord
             }
 
             SaveWindowBounds();
+
+            // Clean shutdown: no crash, so discard the recovery draft
+            _autosaveTimer?.Stop();
+            DeleteDraft();
 
             // When the last window closes, install a background-downloaded
             // update if one is waiting.

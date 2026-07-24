@@ -20,12 +20,22 @@
                 <Separator />
                 <MenuItem x:Name="MenuPreview" Header="Print Pre_view..." Click="MenuFilePreview_Click" />
                 <MenuItem x:Name="MenuPrint" Header="P_rint..." Click="MenuFilePrint_Click" InputGestureText="Ctrl+P" />
+                <MenuItem x:Name="MenuExportPdf" Header="_Export to PDF..." Click="MenuExportPdf_Click" />
                 <Separator />
                 <MenuItem x:Name="MenuExit" Header="E_xit" Click="MenuFileExit_Click" />
             </MenuItem>
             <MenuItem x:Name="MenuEdit" Header="_Edit">
                 <MenuItem x:Name="MenuUndo" Header="_Undo" Click="MenuEditUndo_Click" InputGestureText="Ctrl+Z" />
                 <MenuItem x:Name="MenuRedo" Header="_Redo" Click="MenuEditRedo_Click" InputGestureText="Ctrl+Y" />
+                <Separator />
+                <MenuItem x:Name="MenuCut" Header="Cu_t" Command="Cut" CommandTarget="{Binding ElementName=TextEditor}" InputGestureText="Ctrl+X" />
+                <MenuItem x:Name="MenuCopy" Header="_Copy" Command="Copy" CommandTarget="{Binding ElementName=TextEditor}" InputGestureText="Ctrl+C" />
+                <MenuItem x:Name="MenuPaste" Header="_Paste" Command="Paste" CommandTarget="{Binding ElementName=TextEditor}" InputGestureText="Ctrl+V" />
+                <MenuItem x:Name="MenuPasteText" Header="Paste as plain te_xt" Click="MenuPasteText_Click" InputGestureText="Ctrl+Shift+V" />
+                <MenuItem x:Name="MenuSelectAll" Header="Select _All" Command="SelectAll" CommandTarget="{Binding ElementName=TextEditor}" InputGestureText="Ctrl+A" />
+                <Separator />
+                <MenuItem x:Name="MenuFind" Header="_Find..." Click="MenuFind_Click" InputGestureText="Ctrl+F" />
+                <MenuItem x:Name="MenuReplace" Header="R_eplace..." Click="MenuReplace_Click" InputGestureText="Ctrl+H" />
             </MenuItem>
             <MenuItem x:Name="MenuInsert" Header="_Insert">
                 <MenuItem x:Name="MenuInsertImage" Header="_Image..." Click="MenuInsertImage_Click">
@@ -33,6 +43,9 @@
                         <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8B9;" FontSize="14" VerticalAlignment="Center" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="MenuInsertHyperlink" Header="_Hyperlink..." Click="MenuHyperlink_Click" InputGestureText="Ctrl+K" />
+                <MenuItem x:Name="MenuInsertSymbol" Header="_Symbol..." Click="MenuSymbol_Click" />
+                <MenuItem x:Name="MenuInsertPageBreak" Header="Page _Break" Click="MenuPageBreak_Click" InputGestureText="Ctrl+Enter" />
                 <MenuItem x:Name="MenuHeaderFooter" Header="_Header &amp;&amp; Footer..." Click="MenuHeaderFooter_Click" />
             </MenuItem>
             <MenuItem x:Name="MenuTools" Header="_Tools">
@@ -96,6 +109,22 @@
 
                 <Separator />
 
+                <!-- Clipboard -->
+                <Button x:Name="CutButton" Style="{StaticResource IconButton}" Command="Cut" CommandTarget="{Binding ElementName=TextEditor}">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8C6;" />
+                </Button>
+                <Button x:Name="CopyButton" Style="{StaticResource IconButton}" Command="Copy" CommandTarget="{Binding ElementName=TextEditor}">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8C8;" />
+                </Button>
+                <Button x:Name="PasteButton" Style="{StaticResource IconButton}" Command="Paste" CommandTarget="{Binding ElementName=TextEditor}">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE77F;" />
+                </Button>
+                <ToggleButton x:Name="FormatPainterButton" Width="30" Height="28" Margin="1" Click="FormatPainter_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE790;" />
+                </ToggleButton>
+
+                <Separator />
+
                 <!-- Font -->
                 <ComboBox x:Name="FontFamilyCombo" Width="150" Height="26" Margin="2"
                           VerticalContentAlignment="Center"
@@ -116,6 +145,25 @@
                 <ToggleButton x:Name="UnderlineButton" Width="30" Height="28" Margin="1" Click="UnderlineButton_Click">
                     <TextBlock TextDecorations="Underline" FontSize="14" Text="U" />
                 </ToggleButton>
+                <ToggleButton x:Name="StrikeButton" Width="30" Height="28" Margin="1" Click="StrikeButton_Click">
+                    <TextBlock TextDecorations="Strikethrough" FontSize="14" Text="S" />
+                </ToggleButton>
+                <ToggleButton x:Name="SuperscriptButton" Width="30" Height="28" Margin="1" Click="Superscript_Click">
+                    <TextBlock FontSize="13">x<Run BaselineAlignment="Superscript" FontSize="9">2</Run></TextBlock>
+                </ToggleButton>
+                <ToggleButton x:Name="SubscriptButton" Width="30" Height="28" Margin="1" Click="Subscript_Click">
+                    <TextBlock FontSize="13">x<Run BaselineAlignment="Subscript" FontSize="9">2</Run></TextBlock>
+                </ToggleButton>
+                <Button x:Name="ChangeCaseButton" Width="30" Height="28" Margin="1" Padding="0" Click="ChangeCase_Click">
+                    <TextBlock FontSize="13"><Run FontWeight="Bold">A</Run><Run FontSize="10">a</Run><TextBlock.ContextMenu>
+                        <ContextMenu x:Name="CaseMenu">
+                            <MenuItem x:Name="CaseSentenceItem" Header="Sentence case" Click="CaseSentence_Click" />
+                            <MenuItem x:Name="CaseLowerItem" Header="lowercase" Click="CaseLower_Click" />
+                            <MenuItem x:Name="CaseUpperItem" Header="UPPERCASE" Click="CaseUpper_Click" />
+                            <MenuItem x:Name="CaseTitleItem" Header="Capitalize Each Word" Click="CaseTitle_Click" />
+                        </ContextMenu>
+                    </TextBlock.ContextMenu></TextBlock>
+                </Button>
 
                 <!-- Font color: Word-style split button (letter + color bar, dropdown palette) -->
                 <Button x:Name="FontColorButton" Width="30" Height="28" Margin="3,1,0,1" Padding="0" Click="FontColorButton_Click">
@@ -186,6 +234,22 @@
                                Text="1 —&#x0a;2 —&#x0a;3 —" />
                 </Button>
 
+                <!-- Line spacing quick menu -->
+                <Button x:Name="LineSpacingButton" Style="{StaticResource IconButton}" Click="LineSpacing_Click">
+                    <TextBlock Style="{StaticResource Mdl2}" Text="&#xE8CB;" />
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="LineSpacingMenu">
+                            <MenuItem Header="1.0" Click="LineSpacingPreset_Click" Tag="1.0" />
+                            <MenuItem Header="1.15" Click="LineSpacingPreset_Click" Tag="1.15" />
+                            <MenuItem Header="1.5" Click="LineSpacingPreset_Click" Tag="1.5" />
+                            <MenuItem Header="2.0" Click="LineSpacingPreset_Click" Tag="2.0" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+                <ToggleButton x:Name="ShowMarksButton" Width="30" Height="28" Margin="1" Click="ShowMarks_Click">
+                    <TextBlock FontSize="14" Text="¶" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                </ToggleButton>
+
                 <Separator />
 
                 <Button x:Name="ParagraphButton" Style="{StaticResource IconButton}" Click="ParagraphDialog_Click">
@@ -207,6 +271,10 @@
         <StatusBar DockPanel.Dock="Bottom" Background="#F3F2F1">
             <StatusBarItem>
                 <TextBlock x:Name="PageInfoText" Margin="8,0" />
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock x:Name="WordCountText" Margin="8,0" />
             </StatusBarItem>
         </StatusBar>
 
