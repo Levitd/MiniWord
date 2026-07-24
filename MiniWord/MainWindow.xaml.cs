@@ -33,6 +33,9 @@ namespace MiniWord
         // onto a fresh sheet, creating a real gap. Stripped before save/print.
         private bool _paginating;
         private readonly System.Collections.Generic.List<(System.Windows.Documents.Block block, Thickness orig)> _pageGapMargins = new();
+        // Indices (into Document.Blocks) of each page's first block, so printing can
+        // break at exactly the same paragraph boundaries the editor shows.
+        private readonly System.Collections.Generic.List<int> _pageStartIndices = new();
         private const double PageGap = 24;
 
         // Shared across all windows in the process
@@ -268,7 +271,6 @@ namespace MiniWord
             double pw = _pageSize.WidthDip;
             double ph = _pageSize.HeightDip;
             double cpp = ph - 160;          // content height per sheet (80 top + 80 bottom)
-            double extra = 160 + PageGap;   // bottom margin + gap + top margin between sheets
 
             // 1. Remove previous gap margins so we measure the continuous flow.
             foreach (var (blk, orig) in _pageGapMargins)
@@ -276,39 +278,67 @@ namespace MiniWord
             _pageGapMargins.Clear();
             TextEditor.UpdateLayout();
 
-            // 2. Decide which top-level blocks start a new page (by continuous position).
-            var starts = new System.Collections.Generic.List<(Block block, int page)>();
-            int prevPage = 0, maxPage = 0;
-            foreach (var block in TextEditor.Document.Blocks)
+            // 2. Measure the continuous flow: each top-level block's top and bottom.
+            var blocks = TextEditor.Document.Blocks.ToList();
+            int n = blocks.Count;
+            var tops = new double[n];
+            var bottoms = new double[n];
+            for (int i = 0; i < n; i++)
             {
-                double y;
-                try { y = block.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top; }
-                catch { continue; }
-                if (double.IsNaN(y) || double.IsInfinity(y))
-                    continue;
-
-                int page = Math.Max(0, (int)((y - 80 + 2) / cpp));
-                if ((block as Paragraph)?.Tag as string == "PageBreak" && page <= prevPage)
-                    page = prevPage + 1;      // a manual break always advances a page
-                if (page > prevPage)
+                double top, bottom;
+                try
                 {
-                    starts.Add((block, page));
-                    prevPage = page;
+                    top = blocks[i].ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
+                    bottom = blocks[i].ContentEnd.GetCharacterRect(LogicalDirection.Backward).Bottom;
                 }
-                maxPage = Math.Max(maxPage, page);
+                catch { top = bottom = double.NaN; }
+                if (double.IsNaN(top) || double.IsInfinity(top)) top = i > 0 ? tops[i - 1] : 80;
+                if (double.IsNaN(bottom) || double.IsInfinity(bottom) || bottom < top) bottom = top;
+                tops[i] = top;
+                bottoms[i] = bottom;
             }
-            _totalPages = maxPage + 1;
 
-            // 3. Apply gap margins (each page jump adds one sheet's worth of spacing).
-            int fromPage = 0;
-            foreach (var (block, page) in starts)
+            // 3. Group blocks into pages by cumulative height (breaks snap to whole
+            //    paragraphs), then push each page's first block so it sits exactly at
+            //    its sheet's content-top (a clean 80 DIP margin on every page). Setting
+            //    an explicit margin replaces the paragraph's auto spacing, so we re-add
+            //    that spacing (D) on top of the gap to keep positions exact.
+            _pageStartIndices.Clear();
+            int page = 0;
+            double used = 0;    // content height consumed on the current page
+            double shift = 0;   // total downward shift applied so far
+            for (int i = 0; i < n; i++)
             {
-                int jump = page - fromPage;
-                fromPage = page;
-                var orig = block.Margin;
-                _pageGapMargins.Add((block, orig));
-                block.Margin = new Thickness(orig.Left, orig.Top + extra * jump, orig.Right, orig.Bottom);
+                double h = (i + 1 < n) ? tops[i + 1] - tops[i] : bottoms[i] - tops[i] + 6;
+                if (h <= 0 || double.IsNaN(h)) h = 40;
+
+                bool manual = (blocks[i] as Paragraph)?.Tag as string == "PageBreak";
+                // Break a hair before the printer's capacity (cpp) so a page never
+                // overflows in print — that keeps the on-screen breaks identical to
+                // the printed breaks (which are forced via BreakPageBefore).
+                bool overflow = used > 0 && used + h > cpp - 2;
+                if (i > 0 && (overflow || manual))
+                {
+                    page++;
+                    used = 0;
+                    double targetTop = page * (ph + PageGap) + 80;
+                    double add = targetTop - (tops[i] + shift);
+                    if (add < 0) add = 0;
+                    double d = tops[i] - bottoms[i - 1];     // paragraph's natural top spacing
+                    if (d < 0 || double.IsNaN(d)) d = 0;
+
+                    var orig = blocks[i].Margin;
+                    _pageGapMargins.Add((blocks[i], orig));
+                    double bL = double.IsNaN(orig.Left) ? 0 : orig.Left;
+                    double bR = double.IsNaN(orig.Right) ? 0 : orig.Right;
+                    double bB = double.IsNaN(orig.Bottom) ? 0 : orig.Bottom;
+                    blocks[i].Margin = new Thickness(bL, add + d, bR, bB);
+                    shift += add;
+                    _pageStartIndices.Add(i);
+                }
+                used += h;
             }
+            _totalPages = page + 1;
 
             double stackHeight = _totalPages * ph + (_totalPages - 1) * PageGap;
             TextEditor.MinHeight = stackHeight;
@@ -716,6 +746,14 @@ namespace MiniWord
             });
             clone.FontFamily = TextEditor.FontFamily;
             clone.FontSize = TextEditor.FontSize;
+
+            // Force the printed pages to break at the very same paragraphs the editor
+            // shows as sheet boundaries, so "what you see" matches "what you print".
+            var cloneBlocks = clone.Blocks.ToList();
+            foreach (int idx in _pageStartIndices)
+                if (idx >= 0 && idx < cloneBlocks.Count)
+                    cloneBlocks[idx].BreakPageBefore = true;
+
             return clone;
         }
 
