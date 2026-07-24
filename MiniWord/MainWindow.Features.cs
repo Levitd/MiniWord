@@ -333,46 +333,31 @@ namespace MiniWord
             }
         }
 
-        // Faintly render header/footer text and page numbers at each simulated
-        // page boundary, plus solid lines for manual page breaks. This is an
-        // approximation: the RichTextBox is a continuous surface, so the exact
-        // layout is only guaranteed in Print Preview.
-        private void DrawPageDecorations(double contentPerPage)
+        // Faintly render header/footer text and page numbers within each sheet's
+        // top/bottom margin. Positions are relative to the sheet-with-gap geometry
+        // used by RepaginateSheets.
+        private void DrawPageDecorations()
         {
-            // Manual page breaks: a distinct solid blue line
-            foreach (var para in EnumerateParagraphs(TextEditor.Document.Blocks))
-            {
-                if (para.Tag as string != "PageBreak")
-                    continue;
-                try
-                {
-                    var rect = para.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-                    if (rect.IsEmpty) continue;
-                    PageBreakOverlay.Children.Add(new System.Windows.Shapes.Line
-                    {
-                        X1 = 0, X2 = _pageSize.WidthDip, Y1 = rect.Top, Y2 = rect.Top,
-                        Stroke = Brushes.CornflowerBlue, StrokeThickness = 1.5
-                    });
-                }
-                catch { }
-            }
-
             if (_docSettings == null || !_docSettings.HasAnyContent)
                 return;
+
+            double ph = _pageSize.HeightDip;
+            double step = ph + PageGap;
 
             for (int page = 0; page < _totalPages; page++)
             {
                 if (page == 0 && !_docSettings.ShowOnFirstPage)
                     continue;
 
-                double pageTop = 80 + page * contentPerPage;
-                double pageBottom = pageTop + contentPerPage;
+                double sheetTop = page * step;
+                double headerY = sheetTop + 35;         // 80 top margin - 45
+                double footerY = sheetTop + ph - 68;     // (ph - 80 bottom margin) + 12
 
                 if (_docSettings.HeaderText.Length > 0)
-                    AddOverlayText(_docSettings.HeaderText, 80, pageTop - 45, false);
+                    AddOverlayText(_docSettings.HeaderText, 80, headerY, false);
 
                 if (_docSettings.FooterText.Length > 0)
-                    AddOverlayText(_docSettings.FooterText, 80, pageBottom + 12, false);
+                    AddOverlayText(_docSettings.FooterText, 80, footerY, false);
 
                 if (_docSettings.ShowPageNumbers)
                 {
@@ -380,13 +365,13 @@ namespace MiniWord
                     switch (_docSettings.PageNumberPosition)
                     {
                         case PageNumberPosition.HeaderRight:
-                            AddOverlayText(num, 0, pageTop - 45, true);
+                            AddOverlayText(num, 0, headerY, true);
                             break;
                         case PageNumberPosition.FooterRight:
-                            AddOverlayText(num, 0, pageBottom + 12, true);
+                            AddOverlayText(num, 0, footerY, true);
                             break;
                         default:
-                            AddOverlayText(num, 0, pageBottom + 12, false, center: true);
+                            AddOverlayText(num, 0, footerY, false, center: true);
                             break;
                     }
                 }
@@ -568,7 +553,8 @@ namespace MiniWord
 
             try
             {
-                HtmlExportService.Export(TextEditor.Document, dlg.FileName, _pageSize);
+                WithGapsRemoved(() =>
+                    HtmlExportService.Export(TextEditor.Document, dlg.FileName, _pageSize));
             }
             catch (Exception ex)
             {
@@ -593,7 +579,8 @@ namespace MiniWord
             try
             {
                 Directory.CreateDirectory(AutosaveDir);
-                _docxService.SaveDocument(TextEditor.Document, DraftPath, _pageSize, _docSettings);
+                WithGapsRemoved(() =>
+                    _docxService.SaveDocument(TextEditor.Document, DraftPath, _pageSize, _docSettings));
                 File.WriteAllText(DraftMarkerPath, _currentFilePath ?? "");
             }
             catch { }

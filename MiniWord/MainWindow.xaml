@@ -279,19 +279,21 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- Page view: white sheet on gray canvas, like Word -->
+        <!-- Page view: separate white sheets with a gray gap, like Word.
+             The sheets are drawn on PageSheetLayer; the RichTextBox above them
+             is transparent so its text sits on the sheets and the gray canvas
+             shows through the gaps. -->
         <ScrollViewer x:Name="PageScroll" Background="#808080"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
-            <Border x:Name="PageBorder" Background="White" Margin="25"
+            <Border x:Name="PageBorder" Background="Transparent" Margin="25"
                     HorizontalAlignment="Center" VerticalAlignment="Top"
-                    BorderBrush="#555" BorderThickness="1" SnapsToDevicePixels="True">
-                <Border.Effect>
-                    <DropShadowEffect Color="Black" Opacity="0.4" BlurRadius="10" ShadowDepth="3" />
-                </Border.Effect>
+                    BorderThickness="0" SnapsToDevicePixels="True">
                 <Grid>
+                    <Canvas x:Name="PageSheetLayer" IsHitTestVisible="False" />
                     <RichTextBox x:Name="TextEditor"
                                  AcceptsTab="True"
+                                 Background="Transparent"
                                  BorderThickness="0"
                                  Padding="80"
                                  FontFamily="Calibri" FontSize="16"

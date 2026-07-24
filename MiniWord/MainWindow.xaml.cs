@@ -29,6 +29,12 @@ namespace MiniWord
         private int _totalPages = 1;
         private readonly string? _initialFile;
 
+        // Editable page view: extra top-margins that push each page's first block
+        // onto a fresh sheet, creating a real gap. Stripped before save/print.
+        private bool _paginating;
+        private readonly System.Collections.Generic.List<(System.Windows.Documents.Block block, Thickness orig)> _pageGapMargins = new();
+        private const double PageGap = 24;
+
         // Shared across all windows in the process
         private static bool _updateCheckedThisProcess;
         private static int _windowsCreated;
@@ -240,44 +246,120 @@ namespace MiniWord
             UpdatePageBreakOverlay();
         }
 
-        // Approximate page boundaries in the continuous editing view:
-        // each printed page holds (pageHeight - top/bottom margins) of content
         private void UpdatePageBreakOverlay()
         {
+            if (_paginating)
+                return;
+            _paginating = true;
+            try { RepaginateSheets(); }
+            finally { _paginating = false; }
+        }
+
+        // Editable "page view": lay the document out as separate white sheets with
+        // a gray gap between them. The RichTextBox is one continuous surface, so a
+        // real gap is produced by giving the first block of each page an extra top
+        // margin, snapping automatic breaks to paragraph boundaries. These synthetic
+        // margins are stripped before the document is saved or printed (WithGapsRemoved).
+        private void RepaginateSheets()
+        {
             PageBreakOverlay.Children.Clear();
+            PageSheetLayer.Children.Clear();
 
-            double contentPerPage = _pageSize.HeightDip - 160;
-            double totalHeight = Math.Max(TextEditor.ActualHeight, _pageSize.HeightDip);
-            _totalPages = Math.Max(1, (int)Math.Ceiling((totalHeight - 160) / contentPerPage));
+            double pw = _pageSize.WidthDip;
+            double ph = _pageSize.HeightDip;
+            double cpp = ph - 160;          // content height per sheet (80 top + 80 bottom)
+            double extra = 160 + PageGap;   // bottom margin + gap + top margin between sheets
 
-            for (int i = 1; i < _totalPages; i++)
+            // 1. Remove previous gap margins so we measure the continuous flow.
+            foreach (var (blk, orig) in _pageGapMargins)
+                blk.Margin = orig;
+            _pageGapMargins.Clear();
+            TextEditor.UpdateLayout();
+
+            // 2. Decide which top-level blocks start a new page (by continuous position).
+            var starts = new System.Collections.Generic.List<(Block block, int page)>();
+            int prevPage = 0, maxPage = 0;
+            foreach (var block in TextEditor.Document.Blocks)
             {
-                double y = 80 + i * contentPerPage;
-                if (y > totalHeight - 40)
-                    break;
+                double y;
+                try { y = block.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top; }
+                catch { continue; }
+                if (double.IsNaN(y) || double.IsInfinity(y))
+                    continue;
 
-                PageBreakOverlay.Children.Add(new System.Windows.Shapes.Line
+                int page = Math.Max(0, (int)((y - 80 + 2) / cpp));
+                if ((block as Paragraph)?.Tag as string == "PageBreak" && page <= prevPage)
+                    page = prevPage + 1;      // a manual break always advances a page
+                if (page > prevPage)
                 {
-                    X1 = 0,
-                    X2 = _pageSize.WidthDip,
-                    Y1 = y,
-                    Y2 = y,
-                    Stroke = Brushes.LightSteelBlue,
-                    StrokeThickness = 1,
-                    StrokeDashArray = new DoubleCollection { 6, 4 }
-                });
+                    starts.Add((block, page));
+                    prevPage = page;
+                }
+                maxPage = Math.Max(maxPage, page);
+            }
+            _totalPages = maxPage + 1;
+
+            // 3. Apply gap margins (each page jump adds one sheet's worth of spacing).
+            int fromPage = 0;
+            foreach (var (block, page) in starts)
+            {
+                int jump = page - fromPage;
+                fromPage = page;
+                var orig = block.Margin;
+                _pageGapMargins.Add((block, orig));
+                block.Margin = new Thickness(orig.Left, orig.Top + extra * jump, orig.Right, orig.Bottom);
+            }
+
+            double stackHeight = _totalPages * ph + (_totalPages - 1) * PageGap;
+            TextEditor.MinHeight = stackHeight;
+            TextEditor.UpdateLayout();
+
+            // 4. Draw the white sheets on the layer behind the transparent editor.
+            for (int k = 0; k < _totalPages; k++)
+            {
+                var sheet = new System.Windows.Shapes.Rectangle
+                {
+                    Width = pw,
+                    Height = ph,
+                    Fill = Brushes.White,
+                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Colors.Black,
+                        Opacity = 0.35,
+                        BlurRadius = 12,
+                        ShadowDepth = 3
+                    }
+                };
+                Canvas.SetLeft(sheet, 0);
+                Canvas.SetTop(sheet, k * (ph + PageGap));
+                PageSheetLayer.Children.Add(sheet);
             }
 
             DrawParagraphMarks();
-            DrawPageDecorations(contentPerPage);
+            DrawPageDecorations();
             UpdatePageStatus();
+        }
+
+        // Remove the synthetic page-gap margins, run an action against the plain
+        // continuous document (save/print/export), then restore the page view so
+        // the gaps never leak into files.
+        private void WithGapsRemoved(Action action)
+        {
+            bool had = _pageGapMargins.Count > 0;
+            foreach (var (blk, orig) in _pageGapMargins)
+                blk.Margin = orig;
+            _pageGapMargins.Clear();
+            try { action(); }
+            finally { if (had) UpdatePageBreakOverlay(); }
         }
 
         private void UpdatePageStatus()
         {
-            double contentPerPage = _pageSize.HeightDip - 160;
-            var caretRect = TextEditor.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
-            int current = (int)((caretRect.Y - 80) / contentPerPage) + 1;
+            double step = _pageSize.HeightDip + PageGap;
+            double caretY;
+            try { caretY = TextEditor.CaretPosition.GetCharacterRect(LogicalDirection.Forward).Y; }
+            catch { caretY = 0; }
+            int current = (int)(caretY / step) + 1;
             current = Math.Max(1, Math.Min(_totalPages, current));
             PageInfoText.Text = string.Format(Loc.T("PageStatus"), current, _totalPages);
         }
@@ -603,7 +685,8 @@ namespace MiniWord
         {
             try
             {
-                GetFormatService(filePath).SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings);
+                WithGapsRemoved(() =>
+                    GetFormatService(filePath).SaveDocument(TextEditor.Document, filePath, _pageSize, _docSettings));
                 _hasUnsavedChanges = false;
                 _draftDirty = false;
                 DeleteDraft();
@@ -620,13 +703,17 @@ namespace MiniWord
         // touches the document that is live inside the RichTextBox
         private FlowDocument ClonePrintDocument()
         {
-            var range = new TextRange(TextEditor.Document.ContentStart, TextEditor.Document.ContentEnd);
-            using var ms = new MemoryStream();
-            range.Save(ms, DataFormats.XamlPackage);
-            ms.Position = 0;
-
             var clone = new FlowDocument();
-            new TextRange(clone.ContentStart, clone.ContentEnd).Load(ms, DataFormats.XamlPackage);
+            // Serialize the continuous document (no page-gap margins) so printed
+            // output is not doubly spaced by the on-screen sheet gaps.
+            WithGapsRemoved(() =>
+            {
+                var range = new TextRange(TextEditor.Document.ContentStart, TextEditor.Document.ContentEnd);
+                using var ms = new MemoryStream();
+                range.Save(ms, DataFormats.XamlPackage);
+                ms.Position = 0;
+                new TextRange(clone.ContentStart, clone.ContentEnd).Load(ms, DataFormats.XamlPackage);
+            });
             clone.FontFamily = TextEditor.FontFamily;
             clone.FontSize = TextEditor.FontSize;
             return clone;
@@ -973,9 +1060,14 @@ namespace MiniWord
 
         private void ParagraphDialog_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new ParagraphDialog(TextEditor) { Owner = this };
-            if (dlg.ShowDialog() == true)
-                _hasUnsavedChanges = true;
+            // Edit paragraph spacing against the continuous document so the dialog
+            // never sees (or bakes in) the synthetic page-gap margins.
+            WithGapsRemoved(() =>
+            {
+                var dlg = new ParagraphDialog(TextEditor) { Owner = this };
+                if (dlg.ShowDialog() == true)
+                    _hasUnsavedChanges = true;
+            });
         }
 
         private void PageSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
