@@ -4,7 +4,7 @@
 #define MyAppName "MiniWord"
 ; Override from the command line with: ISCC /DMyAppVersion=x.y.z
 #ifndef MyAppVersion
-  #define MyAppVersion "1.6.2"
+  #define MyAppVersion "1.6.3"
 #endif
 #define MyAppPublisher "Levitd"
 #define MyAppURL "https://github.com/Levitd/MiniWord"

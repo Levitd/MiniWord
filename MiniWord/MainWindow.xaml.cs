@@ -32,7 +32,15 @@ namespace MiniWord
         // Editable page view: extra top-margins that push each page's first block
         // onto a fresh sheet, creating a real gap. Stripped before save/print.
         private bool _paginating;
-        private readonly System.Collections.Generic.List<(System.Windows.Documents.Block block, Thickness orig)> _pageGapMargins = new();
+        // Marks a block whose top margin is a synthetic page gap, and remembers the
+        // margin the document itself asked for. Editing clones a paragraph's local
+        // values — pressing Enter next to a page break hands the new paragraph the gap
+        // as well — and the marker rides along with it, which is how such a copy is
+        // found and undone. Tracking the blocks in a list instead would miss copies and
+        // leave a page-sized hole that no repagination can close (and that would be
+        // written into the saved file).
+        private static readonly DependencyProperty PageGapProperty =
+            DependencyProperty.RegisterAttached("PageGap", typeof(Thickness?), typeof(MainWindow));
         // Indices (into Document.Blocks) of each page's first block, so printing can
         // break at exactly the same paragraph boundaries the editor shows.
         private readonly System.Collections.Generic.List<int> _pageStartIndices = new();
@@ -364,9 +372,7 @@ namespace MiniWord
             double cpp = ph - 160;          // content height per sheet (80 top + 80 bottom)
 
             // 1. Remove previous gap margins so we measure the continuous flow.
-            foreach (var (blk, orig) in _pageGapMargins)
-                blk.Margin = orig;
-            _pageGapMargins.Clear();
+            RemovePageGaps();
             TextEditor.UpdateLayout();
 
             // 2. Measure the continuous flow. Measuring must finish before anything is
@@ -440,7 +446,7 @@ namespace MiniWord
                 if (add < 0) add = 0;
 
                 var orig = blocks[i].Margin;
-                _pageGapMargins.Add((blocks[i], orig));
+                blocks[i].SetValue(PageGapProperty, (Thickness?)orig);
                 double bL = double.IsNaN(orig.Left) ? 0 : orig.Left;
                 double bR = double.IsNaN(orig.Right) ? 0 : orig.Right;
                 double bB = double.IsNaN(orig.Bottom) ? 0 : orig.Bottom;
@@ -479,21 +485,60 @@ namespace MiniWord
             UpdatePageStatus();
         }
 
+        // Give every gapped block its own margin back, wherever it sits in the document
+        // and however it got there. Returns true if anything was actually removed.
+        private bool RemovePageGaps()
+        {
+            bool removed = false;
+            foreach (var block in AllBlocks(TextEditor.Document.Blocks))
+            {
+                if (block.GetValue(PageGapProperty) is not Thickness orig)
+                    continue;
+                block.Margin = orig;
+                block.ClearValue(PageGapProperty);
+                removed = true;
+            }
+            return removed;
+        }
+
+        private static System.Collections.Generic.IEnumerable<Block> AllBlocks(BlockCollection blocks)
+        {
+            foreach (var block in blocks)
+            {
+                yield return block;
+                if (block is List list)
+                {
+                    foreach (var item in list.ListItems)
+                        foreach (var inner in AllBlocks(item.Blocks))
+                            yield return inner;
+                }
+                else if (block is Section section)
+                {
+                    foreach (var inner in AllBlocks(section.Blocks))
+                        yield return inner;
+                }
+                else if (block is Table table)
+                {
+                    foreach (var group in table.RowGroups)
+                        foreach (var row in group.Rows)
+                            foreach (var cell in row.Cells)
+                                foreach (var inner in AllBlocks(cell.Blocks))
+                                    yield return inner;
+                }
+            }
+        }
+
         // Remove the synthetic page-gap margins, run an action against the plain
         // continuous document (save/print/export), then restore the page view so
         // the gaps never leak into files.
         private void WithGapsRemoved(Action action)
         {
-            bool had = _pageGapMargins.Count > 0;
+            bool had;
             _paginating = true;     // stripping the gaps is not a user edit
             try
             {
                 using (SuppressUndo())
-                {
-                    foreach (var (blk, orig) in _pageGapMargins)
-                        blk.Margin = orig;
-                }
-                _pageGapMargins.Clear();
+                    had = RemovePageGaps();
             }
             finally { _paginating = false; }
             try { action(); }
