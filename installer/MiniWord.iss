@@ -1,10 +1,10 @@
-; MiniWord installer script (Inno Setup 6)
+﻿; MiniWord installer script (Inno Setup 6)
 ; Build: ISCC.exe MiniWord.iss
 
 #define MyAppName "MiniWord"
 ; Override from the command line with: ISCC /DMyAppVersion=x.y.z
 #ifndef MyAppVersion
-  #define MyAppVersion "1.6.1"
+  #define MyAppVersion "1.6.2"
 #endif
 #define MyAppPublisher "Levitd"
 #define MyAppURL "https://github.com/Levitd/MiniWord"
@@ -67,7 +67,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 
 [CustomMessages]
 english.DotNetMissing=MiniWord requires the .NET 6 Desktop Runtime (or newer), which was not found on this computer.%n%nOpen the download page now? You can continue the installation and install the runtime later.
-russian.DotNetMissing=Для работы MiniWord требуется .NET 6 Desktop Runtime (или новее), который не найден на этом компьютере.%n%nОткрыть страницу загрузки? Установку можно продолжить, а рантайм поставить позже.
+russian.DotNetMissing=Р”Р»СЏ СЂР°Р±РѕС‚С‹ MiniWord С‚СЂРµР±СѓРµС‚СЃСЏ .NET 6 Desktop Runtime (РёР»Рё РЅРѕРІРµРµ), РєРѕС‚РѕСЂС‹Р№ РЅРµ РЅР°Р№РґРµРЅ РЅР° СЌС‚РѕРј РєРѕРјРїСЊСЋС‚РµСЂРµ.%n%nРћС‚РєСЂС‹С‚СЊ СЃС‚СЂР°РЅРёС†Сѓ Р·Р°РіСЂСѓР·РєРё? РЈСЃС‚Р°РЅРѕРІРєСѓ РјРѕР¶РЅРѕ РїСЂРѕРґРѕР»Р¶РёС‚СЊ, Р° СЂР°РЅС‚Р°Р№Рј РїРѕСЃС‚Р°РІРёС‚СЊ РїРѕР·Р¶Рµ.
 
 [Code]
 function IsDotNetDesktopInstalled(): Boolean;

@@ -37,6 +37,12 @@ namespace MiniWord
         // break at exactly the same paragraph boundaries the editor shows.
         private readonly System.Collections.Generic.List<int> _pageStartIndices = new();
         private const double PageGap = 24;
+        // Editing changes the flow, so the sheets have to be re-laid-out. Debounced so
+        // a burst of keystrokes costs one re-layout instead of one per character.
+        private readonly System.Windows.Threading.DispatcherTimer _repaginateTimer = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
 
         // Shared across all windows in the process
         private static bool _updateCheckedThisProcess;
@@ -68,6 +74,7 @@ namespace MiniWord
 
             TextEditor.TextChanged += TextEditor_TextChanged;
             TextEditor.SizeChanged += (s, e) => UpdatePageBreakOverlay();
+            _repaginateTimer.Tick += (s, e) => { _repaginateTimer.Stop(); UpdatePageBreakOverlay(); };
             Closing += MainWindow_Closing;
             Loaded += MainWindow_Loaded;
 
@@ -253,9 +260,93 @@ namespace MiniWord
         {
             if (_paginating)
                 return;
+            _repaginateTimer.Stop();    // this pass supersedes any pending one
             _paginating = true;
-            try { RepaginateSheets(); }
+
+            // Re-laying-out the sheets can move the caret's line (a paragraph that no
+            // longer fits jumps to the next sheet). Keep it at the same spot in the
+            // viewport so the text under the cursor does not jump while typing.
+            bool anchor = TextEditor.IsKeyboardFocused;
+            double before = anchor ? CaretViewportY() : double.NaN;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using (SuppressUndo())
+                    RepaginateSheets();
+            }
             finally { _paginating = false; }
+
+            // Re-laying-out a long document is not cheap (it is one WPF layout pass over
+            // the whole flow), so let the debounce follow the real cost: short documents
+            // stay snappy, long ones wait for a longer pause instead of hitching often.
+            _repaginateTimer.Interval = TimeSpan.FromMilliseconds(
+                Math.Clamp(watch.Elapsed.TotalMilliseconds * 4, 250, 1500));
+
+            if (!double.IsNaN(before))
+            {
+                double after = CaretViewportY();
+                if (!double.IsNaN(after) && Math.Abs(after - before) > 0.5)
+                    PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset + (after - before));
+            }
+        }
+
+        // WPF records every Block.Margin change as an undo unit, so the synthetic page
+        // gaps would pile up in the undo stack and Ctrl+Z would pop those instead of the
+        // user's text. RichTextBox.IsUndoEnabled = false is no good — it empties the
+        // whole stack — so recording is switched off at WPF's own undo manager. If that
+        // internal type ever moves, the app just keeps the (harmless) extra undo units.
+        private static readonly Type? UndoManagerType =
+            typeof(FrameworkElement).Assembly.GetType("MS.Internal.Documents.UndoManager");
+        private static readonly System.Reflection.MethodInfo? GetUndoManagerMethod =
+            UndoManagerType?.GetMethod("GetUndoManager",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        private static readonly System.Reflection.PropertyInfo? UndoIsEnabledProperty =
+            UndoManagerType?.GetProperty("IsEnabled",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        private IDisposable SuppressUndo() => new UndoSuppression(TextEditor);
+
+        private sealed class UndoSuppression : IDisposable
+        {
+            private readonly object? _manager;
+            private readonly bool _wasEnabled;
+
+            public UndoSuppression(DependencyObject scope)
+            {
+                try
+                {
+                    if (GetUndoManagerMethod == null || UndoIsEnabledProperty == null)
+                        return;
+                    var manager = GetUndoManagerMethod.Invoke(null, new object[] { scope });
+                    if (manager == null)
+                        return;
+                    _wasEnabled = UndoIsEnabledProperty.GetValue(manager) is not false;
+                    UndoIsEnabledProperty.SetValue(manager, false);
+                    _manager = manager;
+                }
+                catch { _manager = null; }
+            }
+
+            public void Dispose()
+            {
+                if (_manager == null)
+                    return;
+                try { UndoIsEnabledProperty!.SetValue(_manager, _wasEnabled); }
+                catch { }
+            }
+        }
+
+        // Caret's vertical position in PageScroll's viewport coordinates (NaN if unknown).
+        private double CaretViewportY()
+        {
+            try
+            {
+                var rect = TextEditor.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
+                if (double.IsNaN(rect.Top) || double.IsInfinity(rect.Top))
+                    return double.NaN;
+                return TextEditor.TranslatePoint(new Point(0, rect.Top), PageScroll).Y;
+            }
+            catch { return double.NaN; }
         }
 
         // Editable "page view": lay the document out as separate white sheets with
@@ -278,38 +369,39 @@ namespace MiniWord
             _pageGapMargins.Clear();
             TextEditor.UpdateLayout();
 
-            // 2. Measure the continuous flow: each top-level block's top and bottom.
+            // 2. Measure the continuous flow. Measuring must finish before anything is
+            //    moved: writing a Margin invalidates the layout, so a later measurement
+            //    would both re-run the whole layout pass and report shifted coordinates.
+            //    Every block's top is needed to add up heights; bottoms are needed only
+            //    where a page actually breaks, so those are measured in step 3.
             var blocks = TextEditor.Document.Blocks.ToList();
             int n = blocks.Count;
             var tops = new double[n];
-            var bottoms = new double[n];
             for (int i = 0; i < n; i++)
             {
-                double top, bottom;
-                try
-                {
-                    top = blocks[i].ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
-                    bottom = blocks[i].ContentEnd.GetCharacterRect(LogicalDirection.Backward).Bottom;
-                }
-                catch { top = bottom = double.NaN; }
+                double top;
+                try { top = blocks[i].ContentStart.GetCharacterRect(LogicalDirection.Forward).Top; }
+                catch { top = double.NaN; }
                 if (double.IsNaN(top) || double.IsInfinity(top)) top = i > 0 ? tops[i - 1] : 80;
-                if (double.IsNaN(bottom) || double.IsInfinity(bottom) || bottom < top) bottom = top;
                 tops[i] = top;
-                bottoms[i] = bottom;
+            }
+
+            double BottomOf(int i)
+            {
+                double bottom;
+                try { bottom = blocks[i].ContentEnd.GetCharacterRect(LogicalDirection.Backward).Bottom; }
+                catch { bottom = double.NaN; }
+                if (double.IsNaN(bottom) || double.IsInfinity(bottom) || bottom < tops[i]) bottom = tops[i];
+                return bottom;
             }
 
             // 3. Group blocks into pages by cumulative height (breaks snap to whole
-            //    paragraphs), then push each page's first block so it sits exactly at
-            //    its sheet's content-top (a clean 80 DIP margin on every page). Setting
-            //    an explicit margin replaces the paragraph's auto spacing, so we re-add
-            //    that spacing (D) on top of the gap to keep positions exact.
-            _pageStartIndices.Clear();
-            int page = 0;
+            //    paragraphs). Deciding is pure arithmetic over the measured tops.
+            var breaks = new System.Collections.Generic.List<int>();
             double used = 0;    // content height consumed on the current page
-            double shift = 0;   // total downward shift applied so far
             for (int i = 0; i < n; i++)
             {
-                double h = (i + 1 < n) ? tops[i + 1] - tops[i] : bottoms[i] - tops[i] + 6;
+                double h = (i + 1 < n) ? tops[i + 1] - tops[i] : BottomOf(i) - tops[i] + 6;
                 if (h <= 0 || double.IsNaN(h)) h = 40;
 
                 bool manual = (blocks[i] as Paragraph)?.Tag as string == "PageBreak";
@@ -319,26 +411,43 @@ namespace MiniWord
                 bool overflow = used > 0 && used + h > cpp - 2;
                 if (i > 0 && (overflow || manual))
                 {
-                    page++;
+                    breaks.Add(i);
                     used = 0;
-                    double targetTop = page * (ph + PageGap) + 80;
-                    double add = targetTop - (tops[i] + shift);
-                    if (add < 0) add = 0;
-                    double d = tops[i] - bottoms[i - 1];     // paragraph's natural top spacing
-                    if (d < 0 || double.IsNaN(d)) d = 0;
-
-                    var orig = blocks[i].Margin;
-                    _pageGapMargins.Add((blocks[i], orig));
-                    double bL = double.IsNaN(orig.Left) ? 0 : orig.Left;
-                    double bR = double.IsNaN(orig.Right) ? 0 : orig.Right;
-                    double bB = double.IsNaN(orig.Bottom) ? 0 : orig.Bottom;
-                    blocks[i].Margin = new Thickness(bL, add + d, bR, bB);
-                    shift += add;
-                    _pageStartIndices.Add(i);
                 }
                 used += h;
             }
-            _totalPages = page + 1;
+            _totalPages = breaks.Count + 1;
+
+            // Natural top spacing of each page's first block, measured while the layout
+            // is still the continuous one (setting an explicit margin replaces that
+            // spacing, so it has to be re-added to land on the exact target).
+            var spacing = new double[breaks.Count];
+            for (int k = 0; k < breaks.Count; k++)
+            {
+                double d = tops[breaks[k]] - BottomOf(breaks[k] - 1);
+                spacing[k] = (d < 0 || double.IsNaN(d)) ? 0 : d;
+            }
+
+            // 4. Push each page's first block so it sits exactly at its sheet's
+            //    content-top — a clean 80 DIP margin on every page.
+            _pageStartIndices.Clear();
+            double shift = 0;   // total downward shift applied so far
+            for (int k = 0; k < breaks.Count; k++)
+            {
+                int i = breaks[k];
+                double targetTop = (k + 1) * (ph + PageGap) + 80;
+                double add = targetTop - (tops[i] + shift);
+                if (add < 0) add = 0;
+
+                var orig = blocks[i].Margin;
+                _pageGapMargins.Add((blocks[i], orig));
+                double bL = double.IsNaN(orig.Left) ? 0 : orig.Left;
+                double bR = double.IsNaN(orig.Right) ? 0 : orig.Right;
+                double bB = double.IsNaN(orig.Bottom) ? 0 : orig.Bottom;
+                blocks[i].Margin = new Thickness(bL, add + spacing[k], bR, bB);
+                shift += add;
+                _pageStartIndices.Add(i);
+            }
 
             double stackHeight = _totalPages * ph + (_totalPages - 1) * PageGap;
             TextEditor.MinHeight = stackHeight;
@@ -376,9 +485,17 @@ namespace MiniWord
         private void WithGapsRemoved(Action action)
         {
             bool had = _pageGapMargins.Count > 0;
-            foreach (var (blk, orig) in _pageGapMargins)
-                blk.Margin = orig;
-            _pageGapMargins.Clear();
+            _paginating = true;     // stripping the gaps is not a user edit
+            try
+            {
+                using (SuppressUndo())
+                {
+                    foreach (var (blk, orig) in _pageGapMargins)
+                        blk.Margin = orig;
+                }
+                _pageGapMargins.Clear();
+            }
+            finally { _paginating = false; }
             try { action(); }
             finally { if (had) UpdatePageBreakOverlay(); }
         }
@@ -507,9 +624,19 @@ namespace MiniWord
 
         private void TextEditor_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // Repagination itself edits the document (the synthetic gap margins), which
+            // raises TextChanged again — that is not a user edit.
+            if (_paginating)
+                return;
+
             _hasUnsavedChanges = true;
             UpdateWordCount();
             MarkDraftDirty();
+
+            // The flow changed: blocks below the caret moved, so the page grouping and
+            // the gap margins are stale. Re-lay-out the sheets once typing settles.
+            _repaginateTimer.Stop();
+            _repaginateTimer.Start();
         }
 
         private void UpdateToolbarState()
@@ -1138,6 +1265,7 @@ namespace MiniWord
 
             // Clean shutdown: no crash, so discard the recovery draft
             _autosaveTimer?.Stop();
+            _repaginateTimer.Stop();
             DeleteDraft();
 
             // When the last window closes, install a background-downloaded
